@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DRAFT — Greenfield EKS wrapper for the Socket Registry Firewall. Stands up a
+  VPC (2 public + 2 private subnets, NAT), an EKS cluster, a managed node group,
+  and the IAM OIDC provider for IRSA. Outputs feed firewall-eks.yaml.
+  Skip this template entirely if you already run an EKS cluster.
+  UNTESTED DRAFT — validate in a non-production account (see README.md).
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: socket-firewall
+  KubernetesVersion:
+    Type: String
+    Default: "1.30"
+  NodeInstanceType:
+    Type: String
+    Default: t3.large
+  DesiredNodes:
+    Type: Number
+    Default: 2
+  MaxNodes:
+    Type: Number
+    Default: 6
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+
+Mappings:
+  Subnets:
+    Public0:  { Cidr: 10.0.0.0/20 }
+    Public1:  { Cidr: 10.0.16.0/20 }
+    Private0: { Cidr: 10.0.32.0/20 }
+    Private1: { Cidr: 10.0.48.0/20 }
+
+Resources:
+  # --- VPC ------------------------------------------------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: !Sub "${ClusterName}-vpc" }]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref InternetGateway }
+
+  PublicSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !FindInMap [Subnets, Public0, Cidr]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "${ClusterName}-public-0" }
+        - { Key: kubernetes.io/role/elb, Value: "1" }
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !FindInMap [Subnets, Public1, Cidr]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub "${ClusterName}-public-1" }
+        - { Key: kubernetes.io/role/elb, Value: "1" }
+  PrivateSubnet0:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !FindInMap [Subnets, Private0, Cidr]
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ClusterName}-private-0" }
+        - { Key: kubernetes.io/role/internal-elb, Value: "1" }
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !FindInMap [Subnets, Private1, Cidr]
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ClusterName}-private-1" }
+        - { Key: kubernetes.io/role/internal-elb, Value: "1" }
+
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties: { Domain: vpc }
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet0
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicAssoc0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PublicRouteTable, SubnetId: !Ref PublicSubnet0 }
+  PublicAssoc1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PublicRouteTable, SubnetId: !Ref PublicSubnet1 }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  PrivateAssoc0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PrivateRouteTable, SubnetId: !Ref PrivateSubnet0 }
+  PrivateAssoc1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { RouteTableId: !Ref PrivateRouteTable, SubnetId: !Ref PrivateSubnet1 }
+
+  # --- EKS cluster ----------------------------------------------------------
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: eks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  Cluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt ClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds: [!Ref PrivateSubnet0, !Ref PrivateSubnet1, !Ref PublicSubnet0, !Ref PublicSubnet1]
+        EndpointPublicAccess: true
+        EndpointPrivateAccess: true
+
+  # IAM OIDC provider for IRSA. NOTE: verify the thumbprint for the region/issuer
+  # (or associate via `eksctl utils associate-iam-oidc-provider`). The value below
+  # is the commonly-used Amazon root CA thumbprint and should be confirmed.
+  OidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: !GetAtt Cluster.OpenIdConnectIssuerUrl
+      ClientIdList: ["sts.amazonaws.com"]
+      ThumbprintList: ["9e99a48a9960b14926bb7f3b02e22da2b0ab7280"]  # CONFIRM
+
+  # --- Managed node group ---------------------------------------------------
+  NodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  NodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref Cluster
+      NodeRole: !GetAtt NodeRole.Arn
+      Subnets: [!Ref PrivateSubnet0, !Ref PrivateSubnet1]
+      InstanceTypes: [!Ref NodeInstanceType]
+      ScalingConfig:
+        MinSize: !Ref DesiredNodes
+        DesiredSize: !Ref DesiredNodes
+        MaxSize: !Ref MaxNodes
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  VpcId:
+    Value: !Ref Vpc
+  PrivateSubnetIds:
+    Value: !Join [",", [!Ref PrivateSubnet0, !Ref PrivateSubnet1]]
+  ClusterSecurityGroupId:
+    Description: Cluster security group (use as ClusterSecurityGroupId in firewall-eks.yaml).
+    Value: !GetAtt Cluster.ClusterSecurityGroupId
+  OIDCProviderArn:
+    Value: !Ref OidcProvider
+  OIDCProviderUrl:
+    Description: Issuer URL without the https:// prefix (strip it before passing to firewall-eks.yaml).
+    Value: !GetAtt Cluster.OpenIdConnectIssuerUrl
