@@ -1,0 +1,447 @@
+# Socket Firewall Helm Chart Values
+
+# Image configuration
+image:
+  repository: socketdev/socket-registry-firewall
+  # Always pin to a specific version
+  tag: "1.1.159"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+# - name: my-registry-secret
+
+# Number of replicas (ignored if autoscaling is enabled)
+replicaCount: 1
+
+# Pod Disruption Budget (keeps pods available during node maintenance)
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1  # Alternative to minAvailable
+
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  # targetMemoryUtilizationPercentage: 80
+
+# Socket API configuration
+socket:
+  # API token for Socket.dev (required)
+  # Required scopes: packages, entitlements:list
+  # Set via --set socket.apiToken=xxx or create secret manually
+  apiToken: ""
+  # Name of existing secret containing SOCKET_SECURITY_API_TOKEN
+  existingSecret: ""
+  existingSecretKey: "SOCKET_SECURITY_API_TOKEN"
+  # Allow package downloads if Socket API is unavailable (default: true)
+  # Set to false for strict security (blocks all packages if API is down)
+  failOpen: true
+  # Allow packages Socket has not yet scanned
+  failOpenUnscanned: true
+  # Pull config from Socket dashboard (wholesale overrides values.yaml settings)
+  useRemoteConfig: false
+  # Remote config refresh interval (only used when useRemoteConfig=true)
+  configRefreshInterval: "60s"
+  # Bearer token interpretation: "string" (literal token) or "env" (env var name)
+  bearerTokenType: "string"
+  # Send usage/decision telemetry to Socket
+  telemetryEnabled: true
+  # Telemetry API version: v1 (batched) or v0 (legacy per-event)
+  telemetryApiVersion: "v1"
+  # Include ignore_reason in decision events sent to telemetry/webhook/splunk
+  saveIgnoreReason: false
+  # Header echoed in logs/telemetry for request correlation
+  requestIdHeader: "X-Socket-Request-ID"
+  # Add X-Socket-Unscanned header to allowed unscanned packages
+  exposeUnscannedHeader: false
+  # Cache TTL for Socket API responses in seconds (default: 600 = 10 minutes)
+  cacheTtl: 600
+  # Log level (default: info). Valid: error, warn, info, debug
+  logLevel: ""
+  # Max bytes per SOCKET_DECISION log line (0 disables splitting)
+  logMaxBodySize: 3900
+  # Emit access logs for NO_ROUTE requests
+  logNoRoute: true
+  # Force-enable debug logging (auto-enabled when logLevel=debug)
+  debugLoggingEnabled: false
+  # Rewrite download/package URLs in metadata responses (e.g. Cargo config.json)
+  rewritePackageUrls: true
+  # Ecosystems where recentlyPublished alerts are enforced.
+  # Empty list = enforced globally per Socket API severity.
+  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx
+  recentlyPublishedEnabledEcosystems: []
+
+# Upstream auth tokens. Two modes:
+# If set, chart provisions a Secret <release>-upstream-tokens with these keys;
+# routes/registries without `upstreamTokenSecret` default to it.
+upstreamTokens:
+  values: {}
+  # NPM_AUTH_TOKEN: "npm_yourtokenhere"
+  # PYPI_AUTH_TOKEN: "user:password"
+
+# Path-based routing (recommended — single domain with path prefixes)
+# See: https://docs.socket.dev/docs/registry-mode-configuration-reference
+pathRouting:
+  enabled: false
+  domain: ""
+  # config_mode: upstream or middle (omit for downstream, which is default)
+  configMode: ""
+  # upstreamToken / upstreamTokenSecret on a route enable upstream auth.
+  # See: https://docs.socket.dev/docs/registry-mode-configuration-reference
+  routes: []
+  # - path: /npm
+  #   upstream: https://registry.npmjs.org
+  #   registry: npm
+  #   upstreamToken: NPM_AUTH_TOKEN
+  #   upstreamTokenSecret: socket-upstream-tokens
+  # - path: /pypi
+  #   upstream: https://pypi.org
+  #   registry: pypi
+  # - path: /maven
+  #   upstream: https://repo1.maven.org/maven2
+  #   registry: maven
+  # - path: /cargo
+  #   upstream: https://index.crates.io
+  #   registry: cargo
+  # - path: /rubygems
+  #   upstream: https://rubygems.org
+  #   registry: rubygems
+  # - path: /openvsx
+  #   upstream: https://open-vsx.org
+  #   registry: openvsx
+  # - path: /nuget
+  #   upstream: https://api.nuget.org
+  #   registry: nuget
+  # - path: /go
+  #   upstream: https://proxy.golang.org
+  #   registry: go
+  # - path: /conda
+  #   upstream: https://conda.anaconda.org
+  #   registry: conda
+
+# Domain-based routing (alternative — each registry gets its own subdomain)
+# Only used when pathRouting.enabled is false.
+# upstreamToken / upstreamTokenSecret on a registry enable upstream auth.
+registries:
+  npm:
+    enabled: false
+    domains:
+      - npm.company.local
+    # upstreamToken: NPM_AUTH_TOKEN
+    # upstreamTokenSecret: socket-upstream-tokens
+  pypi:
+    enabled: false
+    domains:
+      - pypi.firewall.local
+  maven:
+    enabled: false
+    domains:
+      - maven.firewall.local
+  rubygems:
+    enabled: false
+    domains:
+      - rubygems.firewall.local
+  cargo:
+    enabled: false
+    domains:
+      - cargo.firewall.local
+  openvsx:
+    enabled: false
+    domains:
+      - openvsx.firewall.local
+  nuget:
+    enabled: false
+    domains:
+      - nuget.firewall.local
+  go:
+    enabled: false
+    domains:
+      - go.firewall.local
+  conda:
+    enabled: false
+    domains:
+      - conda.firewall.local
+
+# DNS override mode (transparent proxy with real registry hostnames pointed at the firewall)
+#
+# Can be combined with pathRouting for hybrid deployments (e.g., path routing for
+# CI/CD systems that can be reconfigured, DNS override for developer laptops).
+#
+# Requires:
+#   - Internal DNS control to reroute registry hostnames to the firewall
+#   - TLS certificates that match the real registry hostnames (corporate CA or similar)
+dnsRouting:
+  enabled: false
+  # List which registries to route via DNS override.
+  # Supported values: npm, pypi, maven, cargo, rubygems, openvsx, nuget, go, conda
+  # Example: --set dnsRouting.enabled=true --set 'dnsRouting.registries={npm,pypi}'
+  registries: []
+
+# Proxy tuning
+proxy:
+  bufferSize: "16k"
+  buffersCount: 8
+  buffersSize: "16k"
+  connectTimeout: 60
+  sendTimeout: 60
+  readTimeout: 60
+
+# Nginx performance tuning
+nginx:
+  workerProcesses: 2
+  workerConnections: 4096
+  # Access log buffer setting (default: not set, nginx uses its default)
+  # Set to "off" to flush access log lines immediately to stdout
+  accessLogBuffer: ""
+
+# Lua shared-memory zone sizes (raise if cache/stats dictionaries fill up)
+lua:
+  cacheSize: "10m"
+  statsSize: "1m"
+
+# Client IP detection from forwarded headers (for deployments behind LBs/ingress)
+# When header is empty, the nginx realip module is disabled.
+clientIp:
+  # Header to read for the real client IP (e.g., "X-Forwarded-For", "True-Client-IP")
+  header: ""
+  # CIDRs allowed to set the header
+  trustedProxies: []
+  # Walk the header to find the originating IP
+  recursive: true
+
+# HTTP CONNECT forward-proxy listener (for CASB-shaped traffic).
+# Requires OpenResty / nginx with stream{} + ngx_stream_lua_module.
+# When enabled, the chart exposes the CONNECT port on the container and Service.
+forwardProxy:
+  enabled: false
+  port: 3128
+  maxTunnelLifetimeSeconds: 600
+  maxConnectionsPerSource: 64
+  proxyProtocolPort: 8081
+
+# Metadata filtering (removes blocked/warned packages from registry metadata responses)
+metadataFiltering:
+  enabled: false
+  filterBlocked: true
+  filterWarn: false
+  includeUncheckedVersions: true
+  maxVersions: 100
+  cacheTtl: 3600
+  batchSize: 4000
+
+# Redis caching for Socket API lookups
+redis:
+  enabled: false
+  host: redis
+  port: 6379
+  password: ""
+  # Name of existing secret containing Redis password
+  existingSecret: ""
+  existingSecretKey: "REDIS_PASSWORD"
+  db: 0
+  timeout: 1000
+  poolSize: 100
+  ttl: 86400
+  ssl: false
+  sslVerify: true
+  # File path inside the container for the Redis CA certificate.
+  # Use sslCaCertExistingSecret below to have the chart mount a secret
+  # for you. Set sslCaCert directly only if you are delivering the file
+  # via your own volume/init container.
+  sslCaCert: ""
+  # Mount a CA cert from an existing Kubernetes secret. The chart mounts
+  # the secret at /etc/nginx/redis-tls/ca/ca.crt and emits that path to
+  # ssl_ca_cert. Required for managed Redis services that use a private
+  # CA (e.g., GCP Memorystore).
+  sslCaCertExistingSecret: ""
+  sslCaCertExistingSecretKey: "ca.crt"
+  # File path inside the container for the Redis client certificate (mTLS).
+  sslClientCert: ""
+  # Mount a client cert from an existing secret. Mounted at
+  # /etc/nginx/redis-tls/cert/client.crt.
+  sslClientCertExistingSecret: ""
+  sslClientCertExistingSecretKey: "client.crt"
+  # File path inside the container for the Redis client key (mTLS).
+  sslClientKey: ""
+  # Mount a client key from an existing secret. Mounted at
+  # /etc/nginx/redis-tls/key/client.key.
+  sslClientKeyExistingSecret: ""
+  sslClientKeyExistingSecretKey: "client.key"
+
+# Splunk HEC integration
+splunk:
+  enabled: false
+  hecUrl: ""
+  hecToken: ""
+  # Name of existing secret containing Splunk HEC token
+  existingSecret: ""
+  existingSecretKey: "SPLUNK_HEC_TOKEN"
+  index: "sfw-hec"
+  source: "sfw-event"
+
+# Webhook event delivery (fires on package decisions)
+webhook:
+  enabled: false
+  url: ""
+  # Auth header sent to the webhook endpoint (e.g. "Authorization: Bearer <token>")
+  authHeader: ""
+  sslVerify: true
+  timeout: 5000
+  onBlock: true
+  onWarn: true
+  onMonitor: true
+  onIgnore: false
+  # Event batching: deliver events in batches instead of one request per decision
+  batchEnabled: false
+  # Max batch payload size in bytes (default: 512 KiB)
+  batchSize: 524288
+  # Batch flush interval in seconds
+  batchPeriod: 5
+
+# Service configuration
+service:
+  type: ClusterIP
+  httpPort: 80
+  httpsPort: 443
+  # Container listening ports (defaults to httpPort/httpsPort if not set)
+  # Set these to use unprivileged ports (e.g., 8080/8443) when the Service
+  # needs standard ports (80/443) for load balancer listeners
+  containerHttpPort: ""
+  containerHttpsPort: ""
+  # Override HTTPS targetPort (set to "http" when TLS is terminated at the load balancer)
+  httpsTargetPort: ""
+  annotations: {}
+    # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""  # e.g., "nginx", "traefik", "alb"
+  annotations: {}
+    # For AWS ALB:
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internal
+    # For nginx:
+    # nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    # nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+  hosts: []
+    # - host: sfw.company.com
+    #   paths:
+    #     - path: /
+    #       pathType: Prefix
+  tls: []
+    # - secretName: sfw-tls
+    #   hosts:
+    #     - sfw.company.com
+
+# TLS configuration
+tls:
+  # Generate self-signed certificates (for testing)
+  generateSelfSigned: true
+  # Use existing secret with tls.crt and tls.key
+  existingSecret: ""
+  # Set to true when using cert-manager (remaps tls.crt/tls.key to fullchain.pem/privkey.pem)
+  certManager: false
+  # When certManager is true, also project ca.crt from the secret to /etc/nginx/ssl/ca.crt.
+  # Set to false for ACME issuers like Let's Encrypt that don't populate a separate ca.crt
+  # (the chain is already in tls.crt). Keep true for CA, SelfSigned, or Vault issuers if
+  # you want ca.crt mounted in the pod for client trust extraction.
+  includeCaCrt: true
+  # Certificate data (base64 encoded, only used if generateSelfSigned is false and existingSecret is empty)
+  certificate: ""
+  privateKey: ""
+
+# Resource limits
+resources:
+  limits:
+    cpu: "1"
+    memory: 768Mi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Health check configuration
+healthCheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext: {}
+  # fsGroup: 101
+
+# Container security context (PSS restricted profile)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Extra containers to run alongside the firewall (e.g., auth sidecars, log collectors)
+extraContainers: []
+# - name: auth-sidecar
+#   image: my-org/auth-proxy:latest
+#   ports:
+#     - containerPort: 8443
+#   env:
+#     - name: UPSTREAM_PORT
+#       value: "443"
+
+# Init container configuration
+initContainers:
+  copyApp:
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+  certGenerator:
+    image:
+      repository: alpine/openssl
+      tag: "3.3.2"
+      pullPolicy: IfNotPresent
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+# Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

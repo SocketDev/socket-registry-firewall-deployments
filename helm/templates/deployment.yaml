@@ -1,0 +1,368 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "socket-firewall.fullname" . }}
+  labels:
+    {{- include "socket-firewall.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "socket-firewall.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "socket-firewall.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "socket-firewall.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: copy-app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c", "cp -r /app/. /mnt/app/"]
+          {{- with .Values.initContainers.copyApp.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: app-data
+              mountPath: /mnt/app
+        {{- if .Values.tls.generateSelfSigned }}
+        - name: generate-certs
+          image: "{{ .Values.initContainers.certGenerator.image.repository }}:{{ .Values.initContainers.certGenerator.image.tag }}"
+          imagePullPolicy: {{ .Values.initContainers.certGenerator.image.pullPolicy }}
+          {{- with .Values.initContainers.certGenerator.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Generate self-signed certificate for all configured domains
+              DOMAINS=""
+              {{- if .Values.pathRouting.enabled }}
+              DOMAINS="DNS:{{ .Values.pathRouting.domain }}"
+              {{- else }}
+              {{- if .Values.registries.npm.enabled }}
+              {{- range .Values.registries.npm.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.pypi.enabled }}
+              {{- range .Values.registries.pypi.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.maven.enabled }}
+              {{- range .Values.registries.maven.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.rubygems.enabled }}
+              {{- range .Values.registries.rubygems.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.cargo.enabled }}
+              {{- range .Values.registries.cargo.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.openvsx.enabled }}
+              {{- range .Values.registries.openvsx.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.nuget.enabled }}
+              {{- range .Values.registries.nuget.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.go.enabled }}
+              {{- range .Values.registries.go.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- if .Values.registries.conda.enabled }}
+              {{- range .Values.registries.conda.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
+              {{- end }}
+              {{- if .Values.dnsRouting.enabled }}
+              {{- if has "npm" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:registry.npmjs.org"
+              {{- end }}
+              {{- if has "pypi" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:pypi.org,DNS:files.pythonhosted.org"
+              {{- end }}
+              {{- if has "maven" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:repo1.maven.org,DNS:repo.maven.apache.org"
+              {{- end }}
+              {{- if has "cargo" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:index.crates.io"
+              {{- end }}
+              {{- if has "rubygems" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:rubygems.org"
+              {{- end }}
+              {{- if has "openvsx" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:open-vsx.org"
+              {{- end }}
+              {{- if has "nuget" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:api.nuget.org"
+              {{- end }}
+              {{- if has "go" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:proxy.golang.org"
+              {{- end }}
+              {{- if has "conda" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:conda.anaconda.org"
+              {{- end }}
+              {{- end }}
+              # Remove leading comma
+              DOMAINS="${DOMAINS#,}"
+
+              # Generate CA key and certificate
+              openssl genrsa -out /certs/ca.key 2048
+              openssl req -x509 -new -nodes -key /certs/ca.key -sha256 -days 365 \
+                -out /certs/ca.crt -subj "/CN=Socket Firewall CA"
+
+              # Generate server key
+              openssl genrsa -out /certs/tls.key 2048
+
+              # Generate CSR
+              openssl req -new -key /certs/tls.key -out /certs/server.csr \
+                -subj "/CN=socket-firewall"
+
+              # Create extensions file
+              cat > /certs/ext.cnf << EOF
+              authorityKeyIdentifier=keyid,issuer
+              basicConstraints=CA:FALSE
+              keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+              subjectAltName = $DOMAINS
+              EOF
+
+              # Sign server certificate with CA
+              openssl x509 -req -in /certs/server.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+                -CAcreateserial -out /certs/tls.crt -days 365 -sha256 -extfile /certs/ext.cnf
+
+              # Create fullchain (server + CA)
+              cat /certs/tls.crt /certs/ca.crt > /certs/fullchain.pem
+              cp /certs/tls.key /certs/privkey.pem
+
+              echo "Certificates generated for: $DOMAINS"
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /certs
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.containerHttpPort | default .Values.service.httpPort }}
+              protocol: TCP
+            - name: https
+              containerPort: {{ .Values.service.containerHttpsPort | default .Values.service.httpsPort }}
+              protocol: TCP
+            {{- if .Values.forwardProxy.enabled }}
+            - name: forward-proxy
+              containerPort: {{ .Values.forwardProxy.port }}
+              protocol: TCP
+            {{- end }}
+          env:
+            - name: SOCKET_SECURITY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "socket-firewall.secretName" . }}
+                  key: {{ .Values.socket.existingSecretKey }}
+            - name: HTTP_PORT
+              value: {{ (.Values.service.containerHttpPort | default .Values.service.httpPort) | quote }}
+            - name: HTTPS_PORT
+              value: {{ (.Values.service.containerHttpsPort | default .Values.service.httpsPort) | quote }}
+            - name: CONFIG_FILE
+              value: /app/socket.yml
+            {{- if and .Values.redis.enabled (or .Values.redis.password .Values.redis.existingSecret) }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "socket-firewall.redisSecretName" . }}
+                  key: {{ .Values.redis.existingSecretKey }}
+            {{- end }}
+            {{- if and .Values.splunk.enabled (or .Values.splunk.hecToken .Values.splunk.existingSecret) }}
+            - name: SPLUNK_HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "socket-firewall.splunkSecretName" . }}
+                  key: {{ .Values.splunk.existingSecretKey }}
+            {{- end }}
+            {{- $pathBased   := .Values.pathRouting.enabled -}}
+            {{- $domainBased := and (not .Values.pathRouting.enabled) (not .Values.dnsRouting.enabled) -}}
+            {{- if $pathBased }}
+            {{- range .Values.pathRouting.routes }}
+            {{- if .upstreamToken }}
+            - name: {{ .upstreamToken }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .upstreamTokenSecret | default (include "socket-firewall.upstreamTokensSecretName" $) }}
+                  key: {{ .upstreamToken }}
+            {{- end }}
+            {{- end }}
+            {{- else if $domainBased }}
+            {{- range $eco, $cfg := .Values.registries }}
+            {{- if and $cfg.enabled $cfg.upstreamToken }}
+            - name: {{ $cfg.upstreamToken }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cfg.upstreamTokenSecret | default (include "socket-firewall.upstreamTokensSecretName" $) }}
+                  key: {{ $cfg.upstreamToken }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: app-data
+              mountPath: /app
+            - name: config
+              mountPath: /app/socket.yml
+              subPath: socket.yml
+              readOnly: true
+            - name: tls-certs
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+            {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslCaCertExistingSecret }}
+            - name: redis-tls-ca
+              mountPath: /etc/nginx/redis-tls/ca
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslClientCertExistingSecret }}
+            - name: redis-tls-cert
+              mountPath: /etc/nginx/redis-tls/cert
+              readOnly: true
+            {{- end }}
+            {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslClientKeyExistingSecret }}
+            - name: redis-tls-key
+              mountPath: /etc/nginx/redis-tls/key
+              readOnly: true
+            {{- end }}
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: tmp
+              mountPath: /tmp
+          {{- if .Values.healthCheck.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthCheck.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthCheck.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        {{- with .Values.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: app-data
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ include "socket-firewall.fullname" . }}-config
+        - name: tls-certs
+          {{- if .Values.tls.generateSelfSigned }}
+          emptyDir: {}
+          {{- else if .Values.tls.existingSecret }}
+          secret:
+            secretName: {{ .Values.tls.existingSecret }}
+            {{- if .Values.tls.certManager }}
+            items:
+              - key: tls.crt
+                path: fullchain.pem
+              - key: tls.key
+                path: privkey.pem
+              {{- if .Values.tls.includeCaCrt }}
+              - key: ca.crt
+                path: ca.crt
+              {{- end }}
+            {{- end }}
+          {{- else }}
+          secret:
+            secretName: {{ include "socket-firewall.tlsSecretName" . }}
+          {{- end }}
+        {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslCaCertExistingSecret }}
+        - name: redis-tls-ca
+          secret:
+            secretName: {{ .Values.redis.sslCaCertExistingSecret }}
+            items:
+              - key: {{ .Values.redis.sslCaCertExistingSecretKey }}
+                path: ca.crt
+        {{- end }}
+        {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslClientCertExistingSecret }}
+        - name: redis-tls-cert
+          secret:
+            secretName: {{ .Values.redis.sslClientCertExistingSecret }}
+            items:
+              - key: {{ .Values.redis.sslClientCertExistingSecretKey }}
+                path: client.crt
+        {{- end }}
+        {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslClientKeyExistingSecret }}
+        - name: redis-tls-key
+          secret:
+            secretName: {{ .Values.redis.sslClientKeyExistingSecret }}
+            items:
+              - key: {{ .Values.redis.sslClientKeyExistingSecretKey }}
+                path: client.key
+        {{- end }}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

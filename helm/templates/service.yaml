@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "socket-firewall.fullname" . }}
+  labels:
+    {{- include "socket-firewall.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.httpsPort }}
+      targetPort: {{ if .Values.service.httpsTargetPort }}{{ .Values.service.httpsTargetPort }}{{ else }}https{{ end }}
+      protocol: TCP
+      name: https
+    {{- if .Values.forwardProxy.enabled }}
+    - port: {{ .Values.forwardProxy.port }}
+      targetPort: forward-proxy
+      protocol: TCP
+      name: forward-proxy
+    {{- end }}
+  selector:
+    {{- include "socket-firewall.selectorLabels" . | nindent 4 }}

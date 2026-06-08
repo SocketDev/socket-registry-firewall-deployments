@@ -1,0 +1,316 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "socket-firewall.fullname" . }}-config
+  labels:
+    {{- include "socket-firewall.labels" . | nindent 4 }}
+data:
+  socket.yml: |
+    # Socket API configuration
+    socket:
+      fail_open: {{ .Values.socket.failOpen }}
+      fail_open_unscanned: {{ .Values.socket.failOpenUnscanned }}
+      use_remote_config: {{ .Values.socket.useRemoteConfig }}
+      config_refresh_interval: {{ .Values.socket.configRefreshInterval | quote }}
+      bearer_token_type: {{ .Values.socket.bearerTokenType | quote }}
+      telemetry_enabled: {{ .Values.socket.telemetryEnabled }}
+      telemetry_api_version: {{ .Values.socket.telemetryApiVersion | quote }}
+      save_ignore_reason: {{ .Values.socket.saveIgnoreReason }}
+      request_id_header: {{ .Values.socket.requestIdHeader | quote }}
+      expose_unscanned_header: {{ .Values.socket.exposeUnscannedHeader }}
+      log_max_body_size: {{ .Values.socket.logMaxBodySize }}
+      log_no_route: {{ .Values.socket.logNoRoute }}
+      debug_logging_enabled: {{ .Values.socket.debugLoggingEnabled }}
+      rewrite_package_urls: {{ .Values.socket.rewritePackageUrls }}
+      {{- if .Values.socket.logLevel }}
+      log_level: {{ .Values.socket.logLevel }}
+      {{- end }}
+      {{- if .Values.socket.recentlyPublishedEnabledEcosystems }}
+      recently_published_enabled_ecosystems:
+        {{- range .Values.socket.recentlyPublishedEnabledEcosystems }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
+
+    # Cache configuration
+    cache:
+      ttl: {{ .Values.socket.cacheTtl }}
+
+    # Proxy configuration
+    proxy:
+      buffer_size: {{ .Values.proxy.bufferSize }}
+      buffers_count: {{ .Values.proxy.buffersCount }}
+      buffers_size: {{ .Values.proxy.buffersSize }}
+      connect_timeout: {{ .Values.proxy.connectTimeout }}
+      send_timeout: {{ .Values.proxy.sendTimeout }}
+      read_timeout: {{ .Values.proxy.readTimeout }}
+
+    nginx:
+      worker_processes: {{ .Values.nginx.workerProcesses }}
+      worker_connections: {{ .Values.nginx.workerConnections }}
+      {{- if .Values.nginx.accessLogBuffer }}
+      access_log_buffer: {{ .Values.nginx.accessLogBuffer }}
+      {{- end }}
+
+    {{- /* Path routing and DNS override / domain-based registries can be enabled together. */ -}}
+    {{- if .Values.pathRouting.enabled }}
+    path_routing:
+      enabled: true
+      domain: {{ .Values.pathRouting.domain }}
+      {{- if .Values.pathRouting.configMode }}
+      config_mode: {{ .Values.pathRouting.configMode }}
+      {{- end }}
+      routes:
+        {{- range .Values.pathRouting.routes }}
+        - path: {{ .path }}
+          upstream: {{ .upstream }}
+          registry: {{ .registry }}
+          {{- if .mode }}
+          mode: {{ .mode }}
+          {{- end }}
+          {{- if .upstreamToken }}
+          upstream_token: {{ .upstreamToken }}
+          {{- end }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.dnsRouting.enabled }}
+    registries:
+      {{- if has "npm" .Values.dnsRouting.registries }}
+      npm:
+        domains:
+          - registry.npmjs.org
+        upstream: https://registry.npmjs.org
+      {{- end }}
+      {{- if has "pypi" .Values.dnsRouting.registries }}
+      pypi:
+        domains:
+          - pypi.org
+          - files.pythonhosted.org
+        upstream: https://pypi.org
+      {{- end }}
+      {{- if has "maven" .Values.dnsRouting.registries }}
+      maven:
+        domains:
+          - repo1.maven.org
+          - repo.maven.apache.org
+        upstream: https://repo1.maven.org/maven2
+      {{- end }}
+      {{- if has "cargo" .Values.dnsRouting.registries }}
+      cargo:
+        domains:
+          - index.crates.io
+        upstream: https://index.crates.io
+      {{- end }}
+      {{- if has "rubygems" .Values.dnsRouting.registries }}
+      rubygems:
+        domains:
+          - rubygems.org
+        upstream: https://rubygems.org
+      {{- end }}
+      {{- if has "openvsx" .Values.dnsRouting.registries }}
+      openvsx:
+        domains:
+          - open-vsx.org
+        upstream: https://open-vsx.org
+      {{- end }}
+      {{- if has "nuget" .Values.dnsRouting.registries }}
+      nuget:
+        domains:
+          - api.nuget.org
+        upstream: https://api.nuget.org
+      {{- end }}
+      {{- if has "go" .Values.dnsRouting.registries }}
+      go:
+        domains:
+          - proxy.golang.org
+        upstream: https://proxy.golang.org
+      {{- end }}
+      {{- if has "conda" .Values.dnsRouting.registries }}
+      conda:
+        domains:
+          - conda.anaconda.org
+        upstream: https://conda.anaconda.org
+      {{- end }}
+    {{- else if not .Values.pathRouting.enabled }}
+    registries:
+      {{- if .Values.registries.npm.enabled }}
+      npm:
+        domains:
+          {{- range .Values.registries.npm.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.npm.upstreamToken }}
+        upstream_token: {{ .Values.registries.npm.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.pypi.enabled }}
+      pypi:
+        domains:
+          {{- range .Values.registries.pypi.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.pypi.upstreamToken }}
+        upstream_token: {{ .Values.registries.pypi.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.maven.enabled }}
+      maven:
+        domains:
+          {{- range .Values.registries.maven.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.maven.upstreamToken }}
+        upstream_token: {{ .Values.registries.maven.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.rubygems.enabled }}
+      rubygems:
+        domains:
+          {{- range .Values.registries.rubygems.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.rubygems.upstreamToken }}
+        upstream_token: {{ .Values.registries.rubygems.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.cargo.enabled }}
+      cargo:
+        domains:
+          {{- range .Values.registries.cargo.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.cargo.upstreamToken }}
+        upstream_token: {{ .Values.registries.cargo.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.openvsx.enabled }}
+      openvsx:
+        domains:
+          {{- range .Values.registries.openvsx.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.openvsx.upstreamToken }}
+        upstream_token: {{ .Values.registries.openvsx.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.nuget.enabled }}
+      nuget:
+        domains:
+          {{- range .Values.registries.nuget.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.nuget.upstreamToken }}
+        upstream_token: {{ .Values.registries.nuget.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.go.enabled }}
+      go:
+        domains:
+          {{- range .Values.registries.go.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.go.upstreamToken }}
+        upstream_token: {{ .Values.registries.go.upstreamToken }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.registries.conda.enabled }}
+      conda:
+        domains:
+          {{- range .Values.registries.conda.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.conda.upstreamToken }}
+        upstream_token: {{ .Values.registries.conda.upstreamToken }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- if .Values.metadataFiltering.enabled }}
+    metadata_filtering:
+      enabled: true
+      filter_blocked: {{ .Values.metadataFiltering.filterBlocked }}
+      filter_warn: {{ .Values.metadataFiltering.filterWarn }}
+      include_unchecked_versions: {{ .Values.metadataFiltering.includeUncheckedVersions }}
+      max_versions: {{ .Values.metadataFiltering.maxVersions }}
+      cache_ttl: {{ .Values.metadataFiltering.cacheTtl }}
+      batch_size: {{ .Values.metadataFiltering.batchSize }}
+    {{- end }}
+
+    {{- if .Values.redis.enabled }}
+    redis:
+      enabled: true
+      host: {{ .Values.redis.host }}
+      port: {{ .Values.redis.port }}
+      db: {{ .Values.redis.db }}
+      timeout: {{ .Values.redis.timeout }}
+      pool_size: {{ .Values.redis.poolSize }}
+      ttl: {{ .Values.redis.ttl }}
+      {{- if .Values.redis.ssl }}
+      ssl: true
+      ssl_verify: {{ .Values.redis.sslVerify }}
+      {{- if .Values.redis.sslCaCertExistingSecret }}
+      ssl_ca_cert: /etc/nginx/redis-tls/ca/ca.crt
+      {{- else if .Values.redis.sslCaCert }}
+      ssl_ca_cert: {{ .Values.redis.sslCaCert | quote }}
+      {{- end }}
+      {{- if .Values.redis.sslClientCertExistingSecret }}
+      ssl_client_cert: /etc/nginx/redis-tls/cert/client.crt
+      {{- else if .Values.redis.sslClientCert }}
+      ssl_client_cert: {{ .Values.redis.sslClientCert | quote }}
+      {{- end }}
+      {{- if .Values.redis.sslClientKeyExistingSecret }}
+      ssl_client_key: /etc/nginx/redis-tls/key/client.key
+      {{- else if .Values.redis.sslClientKey }}
+      ssl_client_key: {{ .Values.redis.sslClientKey | quote }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- if .Values.splunk.enabled }}
+    splunk:
+      enabled: true
+      hec_url: {{ .Values.splunk.hecUrl }}
+      index: {{ .Values.splunk.index }}
+      source: {{ .Values.splunk.source }}
+    {{- end }}
+
+    {{- if .Values.webhook.enabled }}
+    webhook:
+      enabled: true
+      url: {{ .Values.webhook.url }}
+      auth_header: {{ .Values.webhook.authHeader | quote }}
+      ssl_verify: {{ .Values.webhook.sslVerify }}
+      timeout: {{ .Values.webhook.timeout }}
+      on_block: {{ .Values.webhook.onBlock }}
+      on_warn: {{ .Values.webhook.onWarn }}
+      on_monitor: {{ .Values.webhook.onMonitor }}
+      on_ignore: {{ .Values.webhook.onIgnore }}
+      batch_enabled: {{ .Values.webhook.batchEnabled }}
+      batch_size: {{ .Values.webhook.batchSize }}
+      batch_period: {{ .Values.webhook.batchPeriod }}
+    {{- end }}
+
+    lua:
+      cache_size: {{ .Values.lua.cacheSize | quote }}
+      stats_size: {{ .Values.lua.statsSize | quote }}
+
+    {{- if .Values.clientIp.header }}
+    client_ip:
+      header: {{ .Values.clientIp.header | quote }}
+      recursive: {{ .Values.clientIp.recursive }}
+      {{- if .Values.clientIp.trustedProxies }}
+      trusted_proxies:
+        {{- range .Values.clientIp.trustedProxies }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- if .Values.forwardProxy.enabled }}
+    forward_proxy:
+      enabled: true
+      port: {{ .Values.forwardProxy.port }}
+      max_tunnel_lifetime_seconds: {{ .Values.forwardProxy.maxTunnelLifetimeSeconds }}
+      max_connections_per_source: {{ .Values.forwardProxy.maxConnectionsPerSource }}
+      proxy_protocol_port: {{ .Values.forwardProxy.proxyProtocolPort }}
+    {{- end }}

@@ -1,0 +1,59 @@
+# Corporate Network Deployment
+#
+# Use this when:
+# - Developers are on corporate network or VPN
+# - You have internal DNS control
+# - Corporate CA is already trusted on managed devices
+#
+# How it works:
+# 1. Deploy with this config
+# 2. Point internal DNS for registry.npmjs.org, pypi.org, etc. to the firewall IP
+# 3. No package manager configuration needed on developer laptops
+#
+# Usage:
+#   helm install socket-firewall . -f examples/corporate.yaml \
+#     --set socket.apiToken=$SOCKET_API_TOKEN
+
+replicaCount: 2
+
+socket:
+  # Set via --set socket.apiToken=xxx
+  apiToken: ""
+  failOpen: true
+  cacheTtl: 600
+
+# Expose via LoadBalancer for internal DNS to point at
+service:
+  type: LoadBalancer
+
+# Use corporate CA certificate (already trusted on managed devices)
+tls:
+  generateSelfSigned: false
+  existingSecret: corporate-wildcard-tls  # Create this secret with your corp cert
+
+# Production resources
+resources:
+  limits:
+    cpu: "2"
+    memory: 1Gi
+  requests:
+    cpu: "1"
+    memory: 512Mi
+
+# Enable autoscaling for production
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Spread pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: socket-firewall
+          topologyKey: kubernetes.io/hostname

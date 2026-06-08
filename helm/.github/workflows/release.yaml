@@ -1,0 +1,52 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Chart.yaml'
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Package chart
+        run: |
+          helm package . --destination .deploy
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+          persist-credentials: false
+
+      - name: Update repo index
+        run: |
+          cp .deploy/*.tgz gh-pages/
+          helm repo index gh-pages --url https://socketdev-demo.github.io/socket-firewall-helm
+
+      - name: Push to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd gh-pages
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git add .
+          git diff --staged --quiet && echo "No changes" && exit 0
+          git commit -m "Release $(ls *.tgz | sed 's/\.tgz//')"
+          git push

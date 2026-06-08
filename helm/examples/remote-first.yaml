@@ -1,0 +1,95 @@
+# Remote-First Company Deployment
+#
+# Use this when:
+# - Developers work from anywhere (no VPN requirement)
+# - You can push package manager configs via MDM (Jamf, Intune, etc.)
+# - You want a publicly accessible firewall endpoint
+#
+# How it works:
+# 1. Deploy with this config
+# 2. Use cert-manager or similar for real SSL certificates
+# 3. Push .npmrc, pip.conf, etc. to developer laptops via MDM
+#
+# Usage:
+#   helm install socket-firewall . -f examples/remote-first.yaml \
+#     --set socket.apiToken=$SOCKET_API_TOKEN \
+#     --set ingress.hosts[0].host=sfw.yourcompany.com
+
+replicaCount: 2
+
+socket:
+  # Set via --set socket.apiToken=xxx
+  apiToken: ""
+  failOpen: true
+  cacheTtl: 600
+
+# Enable custom domains for each registry
+# Developers will configure package managers to use these
+registries:
+  npm:
+    enabled: true
+    domains:
+      - npm.yourcompany.com
+  pypi:
+    enabled: true
+    domains:
+      - pypi.yourcompany.com
+
+# Use real certificates (create via cert-manager or manually)
+tls:
+  generateSelfSigned: false
+  existingSecret: socket-firewall-tls  # Must contain tls.crt and tls.key
+
+# Expose via Ingress with real SSL
+ingress:
+  enabled: true
+  className: nginx  # Change to "alb" for AWS, "traefik" for Traefik
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+  hosts:
+    - host: sfw.yourcompany.com  # Override with --set
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: npm.yourcompany.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: pypi.yourcompany.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: socket-firewall-tls
+      hosts:
+        - sfw.yourcompany.com
+        - npm.yourcompany.com
+        - pypi.yourcompany.com
+
+# Production resources
+resources:
+  limits:
+    cpu: "2"
+    memory: 1Gi
+  requests:
+    cpu: "1"
+    memory: 512Mi
+
+# Enable autoscaling for production
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Spread pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: socket-firewall
+          topologyKey: kubernetes.io/hostname

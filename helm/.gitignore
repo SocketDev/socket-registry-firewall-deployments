@@ -1,0 +1,23 @@
+# Helm
+charts/
+*.tgz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+*.secret
+.env
+.env.*
+
+# Test artifacts
+/tmp/
+test-values.yaml
+.claude/

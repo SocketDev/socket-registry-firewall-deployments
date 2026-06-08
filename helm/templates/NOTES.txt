@@ -1,0 +1,108 @@
+Socket Firewall deployed successfully!
+
+{{- if .Values.tls.generateSelfSigned }}
+
+## Self-Signed Certificates
+
+Self-signed certificates were generated. Extract the CA certificate:
+
+  kubectl exec -n {{ .Release.Namespace }} \
+    $(kubectl get pod -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "socket-firewall.name" . }} -o jsonpath='{.items[0].metadata.name}') \
+    -- cat /etc/nginx/ssl/ca.crt > socket-ca.crt
+
+Then trust the CA on developer machines or use a real certificate for production.
+{{- end }}
+
+## Accessing the Firewall
+
+{{- if .Values.ingress.enabled }}
+Ingress is enabled. Get the address:
+
+  kubectl get ingress {{ include "socket-firewall.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- else if eq .Values.service.type "LoadBalancer" }}
+Get the external IP:
+
+  kubectl get svc {{ include "socket-firewall.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- else if eq .Values.service.type "NodePort" }}
+Get the NodePort:
+
+  kubectl get svc {{ include "socket-firewall.fullname" . }} -n {{ .Release.Namespace }}
+
+{{- else }}
+For testing, use port-forward:
+
+  kubectl port-forward svc/{{ include "socket-firewall.fullname" . }} 8443:{{ .Values.service.httpsPort }} -n {{ .Release.Namespace }}
+
+For production, expose via Ingress or change service.type to LoadBalancer.
+{{- end }}
+
+## Usage
+{{- if .Values.pathRouting.enabled }}
+
+Path-based routing is enabled on domain: {{ .Values.pathRouting.domain }}
+
+Configure package managers to use path prefixes:
+{{- range .Values.pathRouting.routes }}
+  {{ .registry }}: https://{{ $.Values.pathRouting.domain }}{{ .path }}/
+{{- end }}
+
+Example:
+  npm config set registry https://{{ .Values.pathRouting.domain }}/npm/
+  pip config set global.index-url https://{{ .Values.pathRouting.domain }}/pypi/simple
+{{- end }}
+{{- if .Values.dnsRouting.enabled }}
+
+DNS override mode is enabled. Point internal DNS for these hostnames to the firewall:
+{{- if has "npm" .Values.dnsRouting.registries }}
+  registry.npmjs.org → firewall IP
+{{- end }}
+{{- if has "pypi" .Values.dnsRouting.registries }}
+  pypi.org → firewall IP
+  files.pythonhosted.org → firewall IP
+{{- end }}
+{{- if has "maven" .Values.dnsRouting.registries }}
+  repo1.maven.org → firewall IP
+  repo.maven.apache.org → firewall IP
+{{- end }}
+{{- if has "cargo" .Values.dnsRouting.registries }}
+  index.crates.io → firewall IP
+{{- end }}
+{{- if has "rubygems" .Values.dnsRouting.registries }}
+  rubygems.org → firewall IP
+{{- end }}
+{{- if has "openvsx" .Values.dnsRouting.registries }}
+  open-vsx.org → firewall IP
+{{- end }}
+{{- if has "nuget" .Values.dnsRouting.registries }}
+  api.nuget.org → firewall IP
+{{- end }}
+{{- if has "go" .Values.dnsRouting.registries }}
+  proxy.golang.org → firewall IP
+{{- end }}
+{{- if has "conda" .Values.dnsRouting.registries }}
+  conda.anaconda.org → firewall IP
+{{- end }}
+
+No package manager configuration needed. Traffic routes through the firewall automatically.
+Ensure TLS certificates match these hostnames (corporate CA or cert-manager).
+{{- end }}
+{{- if and (not .Values.pathRouting.enabled) (not .Values.dnsRouting.enabled) }}
+
+Configure package managers to use your custom domains:
+{{- if .Values.registries.npm.enabled }}
+  npm config set registry https://{{ index .Values.registries.npm.domains 0 }}/
+{{- end }}
+{{- if .Values.registries.pypi.enabled }}
+  pip config set global.index-url https://{{ index .Values.registries.pypi.domains 0 }}/simple/
+{{- end }}
+{{- end }}
+
+## Verify
+
+Test the health endpoint:
+
+  curl -sk https://<firewall-ip>/health
+
+See deployment recommendations in README.md for production setup.

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: socket-firewall
+description: Socket.dev Registry Firewall - Block vulnerable packages before they reach your cluster
+type: application
+version: 0.2.4
+appVersion: "1.1.159"
+keywords:
+  - security
+  - supply-chain
+  - npm
+  - pypi
+  - maven
+  - firewall
+home: https://socket.dev
+sources:
+  - https://github.com/SocketDev/socket-registry-firewall
+maintainers:
+  - name: Socket.dev
+    url: https://socket.dev
