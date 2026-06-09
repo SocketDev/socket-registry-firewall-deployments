@@ -154,15 +154,11 @@ Resources:
         EndpointPublicAccess: true
         EndpointPrivateAccess: true
 
-  # IAM OIDC provider for IRSA. NOTE: verify the thumbprint for the region/issuer
-  # (or associate via `eksctl utils associate-iam-oidc-provider`). The value below
-  # is the commonly-used Amazon root CA thumbprint and should be confirmed.
-  OidcProvider:
-    Type: AWS::IAM::OIDCProvider
-    Properties:
-      Url: !GetAtt Cluster.OpenIdConnectIssuerUrl
-      ClientIdList: ["sts.amazonaws.com"]
-      ThumbprintList: ["9e99a48a9960b14926bb7f3b02e22da2b0ab7280"]  # CONFIRM
+  # IAM OIDC provider for IRSA is intentionally NOT created here — hardcoding an
+  # OIDC thumbprint is brittle. After the cluster is up, associate the provider
+  # (which fetches the correct thumbprint automatically) with:
+  #   eksctl utils associate-iam-oidc-provider --cluster <ClusterName> --approve
+  # Then pass that provider's ARN and the OIDCProviderUrl output into firewall-eks.yaml.
 
   # --- Managed node group ---------------------------------------------------
   NodeRole:
@@ -201,8 +197,9 @@ Outputs:
   ClusterSecurityGroupId:
     Description: Cluster security group (use as ClusterSecurityGroupId in firewall-eks.yaml).
     Value: !GetAtt Cluster.ClusterSecurityGroupId
-  OIDCProviderArn:
-    Value: !Ref OidcProvider
   OIDCProviderUrl:
-    Description: Issuer URL without the https:// prefix (strip it before passing to firewall-eks.yaml).
+    Description: >
+      Cluster OIDC issuer URL. Associate the IAM OIDC provider via
+      `eksctl utils associate-iam-oidc-provider`, then pass that provider's ARN
+      and this URL (without the https:// prefix) into firewall-eks.yaml.
     Value: !GetAtt Cluster.OpenIdConnectIssuerUrl
