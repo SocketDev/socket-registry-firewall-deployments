@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DRAFT — Socket Registry Firewall on EKS: shared base. Provisions the AWS
+  infrastructure the firewall needs (ElastiCache Redis, Socket API token in
+  Secrets Manager, IRSA role) and emits the exact `helm upgrade --install`
+  command to deploy the chart. Assumes an existing EKS cluster; pair with
+  eks-cluster.yaml for a greenfield cluster.
+  UNTESTED DRAFT — validate in a non-production account (see cloudformation/README.md).
+
+Parameters:
+  ClusterName:
+    Type: String
+    Description: Name of the existing EKS cluster to deploy into.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC of the EKS cluster.
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Two or more private subnets for ElastiCache (same VPC as the cluster).
+
+  ClusterSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: The EKS cluster security group that node/pod traffic originates from (allowed into Redis).
+
+  OIDCProviderArn:
+    Type: String
+    Description: IAM OIDC provider ARN of the cluster (for IRSA). From eks-cluster.yaml or `aws eks describe-cluster`.
+
+  OIDCProviderUrl:
+    Type: String
+    Description: IAM OIDC provider URL WITHOUT https:// (e.g. oidc.eks.us-east-1.amazonaws.com/id/ABCDEF...).
+
+  Namespace:
+    Type: String
+    Default: socket-firewall
+    Description: Kubernetes namespace the firewall is installed into.
+
+  ServiceAccountName:
+    Type: String
+    Default: socket-firewall
+    Description: Service account name the chart uses (for the IRSA trust policy).
+
+  SocketApiToken:
+    Type: String
+    NoEcho: true
+    Description: Socket.dev API token (scopes packages, entitlements:list).
+
+  RedisNodeType:
+    Type: String
+    Default: cache.t4g.small
+    Description: ElastiCache node type.
+
+  ChartVersion:
+    Type: String
+    Default: "0.2.4"
+    Description: Socket Firewall Helm chart version to install.
+
+Resources:
+
+  # --- Socket API token -----------------------------------------------------
+  SocketApiTokenSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}/socket-api-token"
+      SecretString: !Ref SocketApiToken
+
+  # --- Redis (ElastiCache) --------------------------------------------------
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Socket Firewall Redis
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref ClusterSecurityGroupId
+          Description: Redis from EKS pods (cluster security group)
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-redis"
+
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: !Sub "${AWS::StackName} Redis subnets"
+      SubnetIds: !Ref PrivateSubnetIds
+
+  RedisReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      ReplicationGroupDescription: Socket Firewall cache
+      Engine: redis
+      CacheNodeType: !Ref RedisNodeType
+      NumCacheClusters: 2
+      AutomaticFailoverEnabled: true
+      MultiAZEnabled: true
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true   # firewall connects with redis.ssl=true
+      Port: 6379
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-redis"
+
+  # --- IRSA role for the firewall service account ---------------------------
+  # Lets the firewall pod read its Socket token from Secrets Manager (so the
+  # token is not baked into a K8s manifest). The chart can also take the token
+  # directly via --set; this role is here for the Secrets-Manager-backed path.
+  FirewallIrsaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-firewall-irsa"
+      # Expressed as a !Sub JSON string: the condition keys are dynamic
+      # (`<oidc-url>:sub`/`:aud`) and CloudFormation can't template a YAML map key.
+      AssumeRolePolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Federated": "${OIDCProviderArn}" },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "${OIDCProviderUrl}:sub": "system:serviceaccount:${Namespace}:${ServiceAccountName}",
+                  "${OIDCProviderUrl}:aud": "sts.amazonaws.com"
+                }
+              }
+            }
+          ]
+        }
+      Policies:
+        - PolicyName: read-socket-token
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ["secretsmanager:GetSecretValue"]
+                Resource: !Ref SocketApiTokenSecret
+
+Outputs:
+  RedisPrimaryEndpoint:
+    Description: ElastiCache primary endpoint (feed into helm redis.host).
+    Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
+
+  SocketApiTokenSecretArn:
+    Description: Secrets Manager ARN holding the Socket API token.
+    Value: !Ref SocketApiTokenSecret
+
+  FirewallIrsaRoleArn:
+    Description: IRSA role ARN to annotate on the firewall service account.
+    Value: !GetAtt FirewallIrsaRole.Arn
+
+  HelmInstallCommand:
+    Description: >
+      Run this after the stack completes to deploy the firewall. (If we instead
+      want the stack itself to run Helm, see the one-shot CodeBuild custom-resource
+      option in README.md.)
+    Value: !Sub |
+      aws eks update-kubeconfig --name ${ClusterName} --region ${AWS::Region} &&
+      helm repo add socket-firewall https://socketdev-demo.github.io/socket-firewall-helm &&
+      helm repo update &&
+      helm upgrade --install socket-firewall socket-firewall/socket-firewall
+        --version ${ChartVersion}
+        --namespace ${Namespace} --create-namespace
+        -f cloudformation/values/dns-override.values.yaml
+        --set redis.host=${RedisReplicationGroup.PrimaryEndPoint.Address}
+        --set socket.apiToken="$(aws secretsmanager get-secret-value --secret-id ${SocketApiTokenSecret} --query SecretString --output text)"
