@@ -1,0 +1,61 @@
+name: Release Chart
+
+# Publishes the Helm chart in helm/ to the gh-pages branch of
+# socketdev-demo/socket-firewall-helm, so the existing download URL
+# (https://socketdev-demo.github.io/socket-firewall-helm) keeps serving and
+# existing `helm repo add` users are unaffected (Option A). Cross-repo push
+# uses the HELM_PAGES_DEPLOY_KEY deploy key (write access on the old repo).
+
+on:
+  push:
+    branches: [main]
+    paths: ['helm/Chart.yaml']   # fires on a chart version bump
+  workflow_dispatch: {}          # manual re-publish of the current version
+
+permissions:
+  contents: read                 # we never write to THIS repo; the old repo is reached via SSH key
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: publish   # scope the deploy-key secret behind a GitHub Environment (zizmor secrets-outside-env)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Package chart
+        run: helm package helm --destination .deploy
+
+      - name: Configure deploy key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.HELM_PAGES_DEPLOY_KEY }}" > ~/.ssh/pages_key
+          chmod 600 ~/.ssh/pages_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Publish to socket-firewall-helm gh-pages
+        env:
+          GIT_SSH_COMMAND: "ssh -i ~/.ssh/pages_key -o IdentitiesOnly=yes"
+        run: |
+          set -euo pipefail
+          git clone --branch gh-pages --single-branch \
+            git@github.com:socketdev-demo/socket-firewall-helm.git pages
+          cp .deploy/*.tgz pages/
+          # Re-index against the full gh-pages contents so all prior versions are
+          # preserved; the published URL is unchanged.
+          helm repo index pages --url https://socketdev-demo.github.io/socket-firewall-helm
+          cd pages
+          git config user.name "socket-firewall-release"
+          git config user.email "release@socket.dev"
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -m "Publish $(ls ../.deploy/*.tgz | xargs -n1 basename | tr '\n' ' ')"
+          git push origin gh-pages
