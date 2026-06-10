@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    pkcs12 = {
+      source  = "chilicat/pkcs12"
+      version = "~> 0.2"
+    }
   }
 }
 
@@ -130,12 +134,42 @@ resource "azurerm_role_assignment" "kv_secrets_officer" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
+# Only created when the token is passed directly. With
+# socket_api_token_key_vault_secret_id, the secret is managed out-of-band and
+# the value never enters Terraform or its state.
 resource "azurerm_key_vault_secret" "socket_api_token" {
+  count        = var.socket_api_token != "" && var.socket_api_token_key_vault_secret_id == "" ? 1 : 0
   name         = "socket-api-token"
   value        = var.socket_api_token
   key_vault_id = azurerm_key_vault.this.id
 
   depends_on = [azurerm_role_assignment.kv_secrets_officer]
+}
+
+# Preserve existing deployments now that the secret resources use count
+moved {
+  from = azurerm_key_vault_secret.socket_api_token
+  to   = azurerm_key_vault_secret.socket_api_token[0]
+}
+
+locals {
+  socket_api_token_secret_id = var.socket_api_token_key_vault_secret_id != "" ? var.socket_api_token_key_vault_secret_id : (var.socket_api_token != "" ? azurerm_key_vault_secret.socket_api_token[0].versionless_id : "")
+}
+
+# Only created when the password is passed directly. With
+# redis_password_key_vault_secret_id, the secret is managed out-of-band and
+# the value never enters Terraform or its state.
+resource "azurerm_key_vault_secret" "redis_password" {
+  count        = var.redis_password != "" && var.redis_password_key_vault_secret_id == "" ? 1 : 0
+  name         = "redis-password"
+  value        = var.redis_password
+  key_vault_id = azurerm_key_vault.this.id
+
+  depends_on = [azurerm_role_assignment.kv_secrets_officer]
+}
+
+locals {
+  redis_password_secret_id = var.redis_password_key_vault_secret_id != "" ? var.redis_password_key_vault_secret_id : (var.redis_password != "" ? azurerm_key_vault_secret.redis_password[0].versionless_id : "")
 }
 
 # ── Self-signed TLS certificate (optional) ──────────────────────────────────
@@ -180,11 +214,11 @@ resource "tls_self_signed_cert" "server" {
   ]
 }
 
-resource "tls_pkcs12_archive" "server" {
-  count               = var.generate_self_signed_cert ? 1 : 0
-  cert_pem            = tls_self_signed_cert.server[0].cert_pem
-  private_key_pem     = tls_private_key.server[0].private_key_pem
-  password            = ""
+resource "pkcs12_from_pem" "server" {
+  count           = var.generate_self_signed_cert ? 1 : 0
+  cert_pem        = tls_self_signed_cert.server[0].cert_pem
+  private_key_pem = tls_private_key.server[0].private_key_pem
+  password        = ""
 }
 
 locals {
@@ -196,6 +230,7 @@ locals {
 }
 
 resource "azurerm_key_vault_secret" "ssl_cert" {
+  count        = var.ssl_cert_key_vault_secret_id == "" ? 1 : 0
   name         = "ssl-cert"
   value        = local.ssl_cert_pem
   key_vault_id = azurerm_key_vault.this.id
@@ -204,11 +239,28 @@ resource "azurerm_key_vault_secret" "ssl_cert" {
 }
 
 resource "azurerm_key_vault_secret" "ssl_key" {
+  count        = var.ssl_key_key_vault_secret_id == "" ? 1 : 0
   name         = "ssl-key"
   value        = local.ssl_key_pem
   key_vault_id = azurerm_key_vault.this.id
 
   depends_on = [azurerm_role_assignment.kv_secrets_officer]
+}
+
+# Preserve existing deployments now that the secret resources use count
+moved {
+  from = azurerm_key_vault_secret.ssl_cert
+  to   = azurerm_key_vault_secret.ssl_cert[0]
+}
+
+moved {
+  from = azurerm_key_vault_secret.ssl_key
+  to   = azurerm_key_vault_secret.ssl_key[0]
+}
+
+locals {
+  ssl_cert_secret_id = var.ssl_cert_key_vault_secret_id != "" ? var.ssl_cert_key_vault_secret_id : azurerm_key_vault_secret.ssl_cert[0].versionless_id
+  ssl_key_secret_id  = var.ssl_key_key_vault_secret_id != "" ? var.ssl_key_key_vault_secret_id : azurerm_key_vault_secret.ssl_key[0].versionless_id
 }
 
 # ── Container Apps Environment ───────────────────────────────────────────────
@@ -239,7 +291,7 @@ resource "azurerm_container_app_environment_certificate" "server" {
   count                        = var.generate_self_signed_cert ? 1 : 0
   name                         = "cert-${local.env_name}"
   container_app_environment_id = azurerm_container_app_environment.this.id
-  certificate_blob_base64      = tls_pkcs12_archive.server[0].content_base64
+  certificate_blob_base64      = pkcs12_from_pem.server[0].result
   certificate_password         = ""
 }
 
@@ -257,29 +309,49 @@ resource "azurerm_container_app" "firewall" {
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
 
+  lifecycle {
+    precondition {
+      condition     = var.socket_api_token != "" || var.socket_api_token_key_vault_secret_id != ""
+      error_message = "Set socket_api_token or socket_api_token_key_vault_secret_id."
+    }
+    precondition {
+      condition     = !(var.generate_self_signed_cert && (var.ssl_cert_key_vault_secret_id != "" || var.ssl_key_key_vault_secret_id != ""))
+      error_message = "ssl_cert_key_vault_secret_id and ssl_key_key_vault_secret_id require generate_self_signed_cert = false."
+    }
+  }
+
   # ── Secrets (pulled from Key Vault via managed identity) ─────────────────
 
   secret {
     name                = "socket-api-token"
-    key_vault_secret_id = azurerm_key_vault_secret.socket_api_token.versionless_id
+    key_vault_secret_id = local.socket_api_token_secret_id
     identity            = azurerm_user_assigned_identity.this.id
   }
 
   secret {
     name                = "ssl-cert"
-    key_vault_secret_id = azurerm_key_vault_secret.ssl_cert.versionless_id
+    key_vault_secret_id = local.ssl_cert_secret_id
     identity            = azurerm_user_assigned_identity.this.id
   }
 
   secret {
     name                = "ssl-key"
-    key_vault_secret_id = azurerm_key_vault_secret.ssl_key.versionless_id
+    key_vault_secret_id = local.ssl_key_secret_id
     identity            = azurerm_user_assigned_identity.this.id
   }
 
   secret {
     name  = "socket-yml"
     value = local.socket_yml
+  }
+
+  dynamic "secret" {
+    for_each = local.redis_password_secret_id != "" ? [1] : []
+    content {
+      name                = "redis-password"
+      key_vault_secret_id = local.redis_password_secret_id
+      identity            = azurerm_user_assigned_identity.this.id
+    }
   }
 
   # ── Ingress (internal only) ─────────────────────────────────────────────
@@ -340,6 +412,19 @@ resource "azurerm_container_app" "firewall" {
         value = tostring(var.redis_port)
       }
 
+      dynamic "env" {
+        for_each = local.redis_password_secret_id != "" ? [1] : []
+        content {
+          name        = "REDIS_PASSWORD"
+          secret_name = "redis-password"
+        }
+      }
+
+      env {
+        name  = "REDIS_SSL"
+        value = tostring(var.redis_ssl)
+      }
+
       # Firewall behavior env vars (must be set as env vars, not just in socket.yml)
       env {
         name  = "SOCKET_FAIL_OPEN"
@@ -376,23 +461,23 @@ resource "azurerm_container_app" "firewall" {
       # ── Liveness probe ────────────────────────────────────────────────
 
       liveness_probe {
-        transport        = "HTTPS"
-        port             = 8443
-        path             = "/health"
-        initial_delay    = 15
-        interval_seconds = 30
-        timeout          = 5
+        transport               = "HTTPS"
+        port                    = 8443
+        path                    = "/health"
+        initial_delay           = 15
+        interval_seconds        = 30
+        timeout                 = 5
         failure_count_threshold = 3
       }
 
       # ── Readiness probe ───────────────────────────────────────────────
 
       readiness_probe {
-        transport        = "HTTPS"
-        port             = 8443
-        path             = "/health"
-        interval_seconds = 10
-        timeout          = 3
+        transport               = "HTTPS"
+        port                    = 8443
+        path                    = "/health"
+        interval_seconds        = 10
+        timeout                 = 3
         failure_count_threshold = 3
         success_count_threshold = 1
       }
@@ -400,11 +485,11 @@ resource "azurerm_container_app" "firewall" {
       # ── Startup probe ─────────────────────────────────────────────────
 
       startup_probe {
-        transport        = "HTTPS"
-        port             = 8443
-        path             = "/health"
-        interval_seconds = 5
-        timeout          = 3
+        transport               = "HTTPS"
+        port                    = 8443
+        path                    = "/health"
+        interval_seconds        = 5
+        timeout                 = 3
         failure_count_threshold = 10
       }
     }

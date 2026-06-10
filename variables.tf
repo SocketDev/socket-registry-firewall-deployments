@@ -25,9 +25,16 @@ variable "firewall_image" {
 }
 
 variable "socket_api_token" {
-  description = "Socket Security API token"
+  description = "Socket Security API token. Persisted in Terraform state; to avoid that, use socket_api_token_key_vault_secret_id instead."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "socket_api_token_key_vault_secret_id" {
+  description = "ID of an existing Key Vault secret holding the Socket API token (e.g. https://<vault>.vault.azure.net/secrets/<name>), created out-of-band so the value never passes through Terraform or its state. Takes precedence over socket_api_token. The Container App managed identity needs the Key Vault Secrets User role on that vault."
+  type        = string
+  default     = ""
 }
 
 variable "socket_fail_open" {
@@ -104,6 +111,18 @@ variable "ssl_key" {
   default     = ""
 }
 
+variable "ssl_cert_key_vault_secret_id" {
+  description = "ID of an existing Key Vault secret holding the PEM-encoded SSL certificate, created out-of-band. Takes precedence over ssl_cert. Requires generate_self_signed_cert = false."
+  type        = string
+  default     = ""
+}
+
+variable "ssl_key_key_vault_secret_id" {
+  description = "ID of an existing Key Vault secret holding the PEM-encoded SSL private key, created out-of-band so the key never passes through Terraform or its state. Takes precedence over ssl_key. Requires generate_self_signed_cert = false."
+  type        = string
+  default     = ""
+}
+
 # ── Redis (optional) ────────────────────────────────────────────────────────
 
 variable "redis_enabled" {
@@ -122,6 +141,25 @@ variable "redis_port" {
   description = "Redis port"
   type        = number
   default     = 6379
+}
+
+variable "redis_password" {
+  description = "Redis AUTH password (e.g. Azure Cache for Redis access key). Stored in Key Vault and injected as a secret. Note: the value is also persisted in Terraform state; to avoid that, use redis_password_key_vault_secret_id instead."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "redis_password_key_vault_secret_id" {
+  description = "ID of an existing Key Vault secret holding the Redis password (e.g. https://<vault>.vault.azure.net/secrets/<name>), created out-of-band so the value never passes through Terraform or its state. Takes precedence over redis_password. The Container App managed identity needs the Key Vault Secrets User role on that vault."
+  type        = string
+  default     = ""
+}
+
+variable "redis_ssl" {
+  description = "Connect to Redis over TLS. Azure Cache for Redis requires TLS on port 6380."
+  type        = bool
+  default     = true
 }
 
 # ── Scaling ──────────────────────────────────────────────────────────────────

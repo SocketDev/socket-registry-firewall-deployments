@@ -3,8 +3,13 @@ location            = "eastus"
 resource_group_name = "rg-socket-firewall"
 environment_name    = "socket-fw"
 
-# Socket API token (set via TF_VAR_socket_api_token env var or -var flag)
+# Socket API token (set via TF_VAR_socket_api_token env var or -var flag;
+# note it is persisted in Terraform state)
 # socket_api_token = ""
+#
+# To keep the token out of Terraform state entirely, create the Key Vault
+# secret out-of-band (az keyvault secret set ...) and reference it instead:
+# socket_api_token_key_vault_secret_id = "https://<vault>.vault.azure.net/secrets/<name>"
 
 # Hostname clients use to reach the firewall.
 # After first deploy, set to the FQDN from terraform output, or use your custom DNS name.
@@ -51,15 +56,31 @@ socket_fail_open = true
 
 # SSL certificates
 # By default, a self-signed cert is generated with SANs matching the domain variable.
+# Note: the generated private key lives in Terraform state.
 # Set generate_self_signed_cert = false to provide your own cert/key.
 # generate_self_signed_cert = false
 # ssl_cert = ""  # PEM-encoded certificate (set via TF_VAR_ssl_cert env var for CI/CD)
-# ssl_key  = ""  # PEM-encoded private key (set via TF_VAR_ssl_key env var for CI/CD)
+# ssl_key  = ""  # PEM-encoded private key (set via TF_VAR_ssl_key env var for CI/CD;
+#                # note it is persisted in Terraform state)
+#
+# To keep cert material out of Terraform state entirely, create the Key Vault
+# secrets out-of-band and reference them (requires generate_self_signed_cert = false):
+# ssl_cert_key_vault_secret_id = "https://<vault>.vault.azure.net/secrets/<cert-name>"
+# ssl_key_key_vault_secret_id  = "https://<vault>.vault.azure.net/secrets/<key-name>"
 
-# Redis (optional)
+# Redis (optional) -- shared cache across replicas
+# Use Azure Cache for Redis with cluster mode disabled (Basic/Standard, or
+# Premium with clustering off). Deploy it in the same region as the firewall.
 redis_enabled = false
-# redis_host  = "redis.internal.example.com"
-# redis_port  = 6379
+# redis_host     = "<name>.redis.cache.windows.net"
+# redis_port     = 6380
+# redis_password = ""    # Azure Cache access key (set via TF_VAR_redis_password for CI/CD;
+#                        # note it is persisted in Terraform state)
+# redis_ssl      = true  # Azure Cache requires TLS on port 6380
+#
+# To keep the password out of Terraform state entirely, create the Key Vault
+# secret out-of-band (az keyvault secret set ...) and reference it instead:
+# redis_password_key_vault_secret_id = "https://<vault>.vault.azure.net/secrets/<name>"
 
 # Scaling
 firewall_image = "socketdev/socket-registry-firewall:latest"
