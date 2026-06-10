@@ -3,9 +3,11 @@
 # Image configuration
 image:
   repository: socketdev/socket-registry-firewall
-  # Always pin to a specific version
-  tag: "1.1.159"
-  pullPolicy: IfNotPresent
+  # Defaults to the latest published image so deployments pick up new releases
+  # without a chart bump. Pin a version for reproducibility, e.g. tag: "1.1.327".
+  tag: "latest"
+  # Always (not IfNotPresent) so "latest" actually refreshes on pod restart.
+  pullPolicy: Always
 
 # Image pull secrets for private registries
 imagePullSecrets: []
@@ -192,11 +194,11 @@ proxy:
 
 # Nginx performance tuning
 nginx:
-  workerProcesses: 2
-  workerConnections: 4096
+  workerProcesses: 4
+  workerConnections: 8192
   # Access log buffer setting (default: not set, nginx uses its default)
   # Set to "off" to flush access log lines immediately to stdout
-  accessLogBuffer: ""
+  accessLogBuffer: "off"
 
 # Lua shared-memory zone sizes (raise if cache/stats dictionaries fill up)
 lua:
@@ -359,12 +361,16 @@ tls:
 
 # Resource limits
 resources:
+  # Defaults sized for metadata filtering: parsing large PyPI indexes (e.g.
+  # aiohttp, ~10k files) can peak ~1GB per worker and OOMs the old 768Mi default.
+  # Memory request == limit (Guaranteed QoS) so the pod isn't evicted/OOM-killed
+  # under node pressure. Lower these if you don't run metadata filtering.
   limits:
-    cpu: "1"
-    memory: 768Mi
+    cpu: "4"
+    memory: 8Gi
   requests:
-    cpu: 500m
-    memory: 512Mi
+    cpu: "2"
+    memory: 8Gi
 
 # Health check configuration
 healthCheck:
