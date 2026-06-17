@@ -215,15 +215,31 @@ clientIp:
   # Walk the header to find the originating IP
   recursive: true
 
-# HTTP CONNECT forward-proxy listener (for CASB-shaped traffic).
-# Requires OpenResty / nginx with stream{} + ngx_stream_lua_module.
-# When enabled, the chart exposes the CONNECT port on the container and Service.
+# HTTP CONNECT forward-proxy listener, for CASBs (e.g. Netskope/Zscaler in
+# proxy-chaining mode) that reach upstreams via a CONNECT tunnel. Requires the
+# official image (>= 1.1.275). See README "Forward Proxy (HTTP CONNECT)".
 forwardProxy:
   enabled: false
   port: 3128
+  # Hard cap on a single tunnel's lifetime (seconds).
   maxTunnelLifetimeSeconds: 600
+  # Per-source-IP concurrent tunnel cap.
   maxConnectionsPerSource: 64
+  # Internal loopback PROXY-protocol port (not exposed). Must differ from port.
   proxyProtocolPort: 8081
+  # Set true only for a custom image you've confirmed supports stream-lua.
+  skipStreamLuaCheck: false
+  # Dedicated Service for the CONNECT port. CONNECT cannot pass through an L7
+  # Ingress, so this must be a Layer-4 (TCP passthrough) load balancer.
+  service:
+    enabled: false
+    type: LoadBalancer
+    # Provider-specific L4 load balancer annotations, if any.
+    annotations: {}
+    # Fixed nodePort (30000-32767) when type=NodePort. Empty = auto-assign.
+    nodePort: ""
+    # Restrict source CIDRs that may reach the listener (e.g. CASB egress).
+    loadBalancerSourceRanges: []
 
 # Metadata filtering (removes blocked/warned packages from registry metadata responses)
 metadataFiltering:
@@ -372,7 +388,10 @@ resources:
     cpu: "2"
     memory: 8Gi
 
-# Health check configuration
+# Health check configuration.
+# Note: the CONNECT listener (forwardProxy) shares the same nginx master
+# process as the HTTP/HTTPS listeners, so this /health probe also covers it
+# — if :3128 fails to bind, nginx won't start and the probe fails too.
 healthCheck:
   enabled: true
   path: /health
@@ -380,6 +399,11 @@ healthCheck:
   periodSeconds: 30
   timeoutSeconds: 10
   failureThreshold: 3
+
+# Pod termination grace period (seconds). Empty = Kubernetes default (30s).
+# When forwardProxy is enabled, set this >= forwardProxy.maxTunnelLifetimeSeconds
+# so in-flight CONNECT tunnels aren't killed mid-stream on rollout/scale-down.
+terminationGracePeriodSeconds: ""
 
 # Pod annotations
 podAnnotations: {}

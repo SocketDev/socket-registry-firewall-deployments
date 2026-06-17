@@ -1,0 +1,34 @@
+{{- if and .Values.forwardProxy.enabled .Values.forwardProxy.service.enabled }}
+{{- /*
+  Dedicated Service for the CONNECT listener. CONNECT cannot traverse an L7
+  Ingress, so this must be a Layer-4 (TCP passthrough) load balancer
+  (type LoadBalancer or NodePort).
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "socket-firewall.fullname" . }}-connect
+  labels:
+    {{- include "socket-firewall.labels" . | nindent 4 }}
+    app.kubernetes.io/component: forward-proxy
+  {{- with .Values.forwardProxy.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.forwardProxy.service.type }}
+  {{- with .Values.forwardProxy.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.forwardProxy.port }}
+      targetPort: forward-proxy
+      protocol: TCP
+      name: forward-proxy
+      {{- if and (eq .Values.forwardProxy.service.type "NodePort") .Values.forwardProxy.service.nodePort }}
+      nodePort: {{ .Values.forwardProxy.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "socket-firewall.selectorLabels" . | nindent 4 }}
+{{- end }}

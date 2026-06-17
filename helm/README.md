@@ -123,8 +123,20 @@ registries:
 | `autoscaling.enabled` | Enable HorizontalPodAutoscaler | `false` |
 | `podDisruptionBudget.enabled` | Keep pods available during node maintenance | `true` |
 | `extraContainers` | Sidecar containers (auth proxies, log collectors) | `[]` |
-| `resources.limits.cpu` | CPU limit | `1` |
-| `resources.limits.memory` | Memory limit | `768Mi` |
+| `resources.limits.cpu` | CPU limit | `4` |
+| `resources.limits.memory` | Memory limit | `8Gi` |
+| `terminationGracePeriodSeconds` | Pod grace period; set ≥ `forwardProxy.maxTunnelLifetimeSeconds` when CONNECT is enabled | `""` (30s) |
+| **Forward Proxy (HTTP CONNECT)** | _CASB CONNECT tunnels — see [section below](#forward-proxy-http-connect)_ | |
+| `forwardProxy.enabled` | Enable the CONNECT listener (requires image ≥ 1.1.275) | `false` |
+| `forwardProxy.port` | CONNECT listener port | `3128` |
+| `forwardProxy.maxTunnelLifetimeSeconds` | Hard cap on a single tunnel's lifetime | `600` |
+| `forwardProxy.maxConnectionsPerSource` | Per-source-IP concurrent tunnel cap | `64` |
+| `forwardProxy.proxyProtocolPort` | Internal loopback PROXY-protocol port | `8081` |
+| `forwardProxy.skipStreamLuaCheck` | Bypass nginx stream-lua capability check (custom images only) | `false` |
+| `forwardProxy.service.enabled` | Create a dedicated L4 Service for CONNECT (required to expose it externally) | `false` |
+| `forwardProxy.service.type` | `LoadBalancer` (NLB) or `NodePort` — **not** behind an ALB/L7 ingress | `LoadBalancer` |
+| `forwardProxy.service.annotations` | Annotations for the L4 Service (e.g. AWS NLB) | `{}` |
+| `forwardProxy.service.loadBalancerSourceRanges` | CIDRs allowed to reach the CONNECT listener (your CASB egress) | `[]` |
 | **Security** | | |
 | `securityContext` | Container security context | PSS restricted (see values.yaml) |
 | `podSecurityContext` | Pod-level security context | `{}` |
@@ -338,6 +350,9 @@ ingress:
 
 ### AWS ALB Ingress
 
+> An ALB cannot carry the HTTP CONNECT method. For CASB CONNECT tunnels, see
+> [Forward Proxy (HTTP CONNECT)](#forward-proxy-http-connect).
+
 ```yaml
 ingress:
   enabled: true
@@ -379,6 +394,30 @@ ingress:
         - registry.npmjs.org
         - pypi.org
 ```
+
+## Forward Proxy (HTTP CONNECT)
+
+Some CASBs (e.g. Netskope or Zscaler in proxy-chaining mode) reach upstream
+proxies via an HTTP `CONNECT` tunnel instead of a standard HTTPS request. Enable
+the firewall's CONNECT listener with `forwardProxy.enabled` (requires image
+≥ 1.1.275).
+
+Because `CONNECT` is a raw TCP tunnel, it cannot pass through a Layer-7 Ingress
+(nginx, Traefik, AWS ALB) — those terminate TLS and parse HTTP. Expose it with a
+**Layer-4 (TCP passthrough) load balancer** by setting
+`forwardProxy.service.enabled=true`, which creates a dedicated Service for the
+CONNECT port. Your existing Ingress/Service keeps serving normal HTTPS traffic.
+
+```yaml
+forwardProxy:
+  enabled: true
+  service:
+    enabled: true
+    type: LoadBalancer   # must be L4 (TCP passthrough), not an L7 ingress
+```
+
+See [`examples/forward-proxy.yaml`](examples/forward-proxy.yaml) for a complete
+example.
 
 ## TLS Configuration
 

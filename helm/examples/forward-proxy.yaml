@@ -1,0 +1,37 @@
+# Forward Proxy (HTTP CONNECT) example — for CASBs (e.g. Netskope/Zscaler in
+# proxy-chaining mode) that reach upstreams via a CONNECT tunnel. Exposes the
+# CONNECT port on a Layer-4 (TCP passthrough) Service, since CONNECT cannot
+# traverse an L7 Ingress.
+#
+# Usage:
+#   helm install socket-firewall . -f examples/forward-proxy.yaml \
+#     --set socket.apiToken=$SOCKET_API_TOKEN \
+#     --set pathRouting.domain=sfw.yourcompany.com
+
+socket:
+  apiToken: ""  # set via --set socket.apiToken=xxx
+
+# Clients still target the firewall's own hostname/paths as usual.
+pathRouting:
+  enabled: true
+  domain: sfw.yourcompany.com  # override with --set
+  routes:
+    - path: /npm
+      upstream: https://registry.npmjs.org
+      registry: npm
+    - path: /pypi
+      upstream: https://pypi.org
+      registry: pypi
+
+forwardProxy:
+  enabled: true
+  service:
+    enabled: true
+    type: LoadBalancer          # must be L4 (TCP passthrough)
+    annotations: {}             # provider-specific L4 LB annotations, if any
+    # Restrict to your CASB egress ranges (recommended).
+    loadBalancerSourceRanges: []
+
+# Give in-flight tunnels time to drain on rollout/scale-down
+# (set >= forwardProxy.maxTunnelLifetimeSeconds).
+terminationGracePeriodSeconds: 660
