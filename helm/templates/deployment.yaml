@@ -22,6 +22,9 @@ spec:
         {{- include "socket-firewall.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "socket-firewall.serviceAccountName" . }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -202,6 +205,10 @@ spec:
               value: {{ (.Values.service.containerHttpsPort | default .Values.service.httpsPort) | quote }}
             - name: CONFIG_FILE
               value: /app/socket.yml
+            {{- if and .Values.forwardProxy.enabled .Values.forwardProxy.skipStreamLuaCheck }}
+            - name: SOCKET_SKIP_STREAM_LUA_CHECK
+              value: "1"
+            {{- end }}
             {{- if and .Values.redis.enabled (or .Values.redis.password .Values.redis.existingSecret) }}
             - name: REDIS_PASSWORD
               valueFrom:

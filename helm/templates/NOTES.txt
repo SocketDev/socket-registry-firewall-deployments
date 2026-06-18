@@ -99,6 +99,26 @@ Configure package managers to use your custom domains:
 {{- end }}
 {{- end }}
 
+{{- if .Values.forwardProxy.enabled }}
+
+## Forward Proxy (HTTP CONNECT)
+
+CONNECT listener enabled on port {{ .Values.forwardProxy.port }} — point your CASB here.
+Expose it via a Layer-4 (TCP passthrough) load balancer; it cannot go through an Ingress.
+{{- if .Values.forwardProxy.service.enabled }}
+
+  kubectl get svc {{ include "socket-firewall.fullname" . }}-connect -n {{ .Release.Namespace }}
+{{- else }}
+
+  Set forwardProxy.service.enabled=true to create the Layer-4 Service for external access.
+{{- end }}
+{{- if not .Values.terminationGracePeriodSeconds }}
+
+  Tip: set terminationGracePeriodSeconds >= forwardProxy.maxTunnelLifetimeSeconds so
+  in-flight tunnels drain on rollout/scale-down.
+{{- end }}
+{{- end }}
+
 ## Verify
 
 Test the health endpoint:
