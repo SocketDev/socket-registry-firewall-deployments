@@ -432,6 +432,22 @@ tolerations: []
 # Affinity
 affinity: {}
 
+# Topology spread constraints (evenly distribute replicas across failure domains
+# such as zones or nodes). Preferred over soft pod anti-affinity for even spreading.
+# Empty by default; only takes effect with replicaCount > 1 or autoscaling enabled.
+# The base field is GA since Kubernetes 1.19 (universally available). The optional
+# matchLabelKeys field needs Kubernetes 1.27+ (satisfied by all current EKS/GKE versions).
+topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway   # use DoNotSchedule for a hard guarantee
+  #   labelSelector:
+  #     matchLabels:
+  #       app.kubernetes.io/name: socket-firewall
+  #   # matchLabelKeys requires Kubernetes 1.27+
+  #   # matchLabelKeys:
+  #   #   - pod-template-hash
+
 # Extra containers to run alongside the firewall (e.g., auth sidecars, log collectors)
 extraContainers: []
 # - name: auth-sidecar

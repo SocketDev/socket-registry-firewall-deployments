@@ -122,6 +122,7 @@ registries:
 | `ingress.className` | Ingress class (nginx, alb, traefik) | `""` |
 | `autoscaling.enabled` | Enable HorizontalPodAutoscaler | `false` |
 | `podDisruptionBudget.enabled` | Keep pods available during node maintenance | `true` |
+| `topologySpreadConstraints` | Evenly spread replicas across zones/nodes | `[]` |
 | `extraContainers` | Sidecar containers (auth proxies, log collectors) | `[]` |
 | `resources.limits.cpu` | CPU limit | `4` |
 | `resources.limits.memory` | Memory limit | `8Gi` |
@@ -491,6 +492,35 @@ When enabled, the HorizontalPodAutoscaler manages replica count based on CPU and
 kubectl get hpa socket-firewall
 kubectl describe hpa socket-firewall
 ```
+
+## Spreading Replicas Across Zones
+
+When you run more than one replica (via `replicaCount` or autoscaling), use
+`topologySpreadConstraints` to distribute pods evenly across availability zones
+(or nodes) so a single zone/node failure can't take down a disproportionate share
+of the fleet. This is preferred over soft pod anti-affinity, which the scheduler is
+free to ignore and can pile replicas into one zone.
+
+```yaml
+replicaCount: 3
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway   # best-effort even spread; never blocks scheduling
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: socket-firewall
+```
+
+- `maxSkew: 1` keeps zones within one pod of each other.
+- `whenUnsatisfiable: ScheduleAnyway` is a soft guarantee (recommended). Use
+  `DoNotSchedule` for a hard guarantee — but be aware pods can stay `Pending` if a
+  zone is full or you have fewer zones than replicas.
+- Pin spreading to a specific revision by adding `matchLabelKeys: [pod-template-hash]`
+  (requires Kubernetes 1.27+, satisfied by all currently-supported EKS and GKE versions).
+
+**Compatibility:** `topologySpreadConstraints` is GA since Kubernetes 1.19, so it works
+on every currently-supported cluster. The chart sets no `kubeVersion` floor.
 
 ## Using an Existing Secret for API Token
 
