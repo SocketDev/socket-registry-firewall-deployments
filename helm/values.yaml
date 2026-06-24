@@ -5,7 +5,7 @@ image:
   repository: socketdev/socket-registry-firewall
   # Defaults to the latest published image so deployments pick up new releases
   # without a chart bump. Pin a version for reproducibility, e.g. tag: "1.1.327".
-  tag: "1.1.337"
+  tag: "1.1.341"
   # Always (not IfNotPresent) so "latest" actually refreshes on pod restart.
   pullPolicy: Always
 
