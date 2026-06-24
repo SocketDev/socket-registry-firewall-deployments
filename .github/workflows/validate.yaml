@@ -1,0 +1,67 @@
+name: Validate Chart
+
+# Pre-publish validation for the Helm chart. Runs on PRs (and manually) that
+# touch helm/**, gating the release.yaml publish (which fires on a Chart.yaml
+# version bump). Catches render/schema regressions and asserts the chart's
+# pass-through plumbing via helm-unittest before anything reaches gh-pages.
+
+on:
+  pull_request:
+    paths: ['helm/**', '.github/workflows/validate.yaml']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: v0.8.0
+  HELM_UNITTEST_VERSION: v1.1.1
+  # Kubernetes API version to validate rendered manifests against. The chart's
+  # implicit floor is ~1.23 (autoscaling/v2); validate against a current stable.
+  KUBE_VERSION: "1.30.0"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Install kubeconform
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" -o kubeconform.tar.gz
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+
+      - name: Helm lint
+        run: helm lint helm
+
+      - name: Helm template + kubeconform (default + examples)
+        run: |
+          set -euo pipefail
+          # Validate the default render plus every example values file so we
+          # exercise the path-routing, DNS-override, and forward-proxy branches.
+          render_and_validate() {
+            local name="$1"; shift
+            echo "::group::kubeconform: ${name}"
+            helm template release helm --set socket.apiToken=ci-dummy "$@" \
+              | kubeconform -strict -summary -kubernetes-version "${KUBE_VERSION}" -schema-location default
+            echo "::endgroup::"
+          }
+          render_and_validate "default"
+          for f in helm/examples/*.yaml; do
+            render_and_validate "$(basename "$f")" -f "$f"
+          done
+
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "${HELM_UNITTEST_VERSION}" --verify=false
+
+      - name: Helm unittest
+        run: helm unittest helm

@@ -1,0 +1,44 @@
+suite: upstream token env wiring
+# Verifies that a path route's upstreamToken produces a container env var backed
+# by a secretKeyRef into the chart-provisioned upstream-tokens secret.
+# configmap.yaml is listed because deployment.yaml's checksum/config annotation
+# includes it; documentSelector scopes the assertions to the Deployment.
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+release:
+  name: release
+tests:
+  - it: does not wire upstream token env by default
+    template: templates/deployment.yaml
+    set:
+      socket.apiToken: ci-dummy
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NPM_AUTH_TOKEN
+          any: true
+
+  - it: wires upstream token env from a path route
+    template: templates/deployment.yaml
+    set:
+      socket.apiToken: ci-dummy
+      pathRouting.enabled: true
+      pathRouting.domain: sfw.example.com
+      pathRouting.routes:
+        - path: /npm
+          upstream: https://registry.npmjs.org
+          registry: npm
+          upstreamToken: NPM_AUTH_TOKEN
+      upstreamTokens.values:
+        NPM_AUTH_TOKEN: "npm_xxx"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NPM_AUTH_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: release-socket-firewall-upstream-tokens
+                key: NPM_AUTH_TOKEN

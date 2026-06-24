@@ -1,0 +1,79 @@
+suite: pod scheduling pass-through
+# Verifies the optional scheduling fields are pure pass-throughs: absent when
+# unset (no behavior change for existing installs) and rendered verbatim when set.
+# configmap.yaml is listed at suite level because deployment.yaml's
+# checksum/config annotation includes it; each test scopes its assertions to the
+# Deployment via the test-level `template` field.
+templates:
+  - templates/deployment.yaml
+  - templates/configmap.yaml
+release:
+  name: release
+tests:
+  - it: omits scheduling fields by default
+    template: templates/deployment.yaml
+    set:
+      socket.apiToken: ci-dummy
+    asserts:
+      - notExists:
+          path: spec.template.spec.topologySpreadConstraints
+      - notExists:
+          path: spec.template.spec.affinity
+      - notExists:
+          path: spec.template.spec.nodeSelector
+      - notExists:
+          path: spec.template.spec.tolerations
+
+  - it: renders topologySpreadConstraints when set
+    template: templates/deployment.yaml
+    set:
+      socket.apiToken: ci-dummy
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: socket-firewall
+    asserts:
+      - exists:
+          path: spec.template.spec.topologySpreadConstraints
+      - lengthEqual:
+          path: spec.template.spec.topologySpreadConstraints
+          count: 1
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].maxSkew
+          value: 1
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].topologyKey
+          value: topology.kubernetes.io/zone
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].whenUnsatisfiable
+          value: ScheduleAnyway
+
+  - it: renders affinity and tolerations when set
+    template: templates/deployment.yaml
+    set:
+      socket.apiToken: ci-dummy
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: disktype
+                    operator: In
+                    values: [ssd]
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: firewall
+          effect: NoSchedule
+    asserts:
+      - exists:
+          path: spec.template.spec.affinity
+      - equal:
+          path: spec.template.spec.tolerations[0].key
+          value: dedicated
+      - equal:
+          path: spec.template.spec.tolerations[0].effect
+          value: NoSchedule
