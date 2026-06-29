@@ -35,7 +35,7 @@ spec:
       {{- end }}
       initContainers:
         - name: copy-app
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ include "socket-firewall.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/bin/sh", "-c", "cp -r /app/. /mnt/app/"]
           {{- with .Values.initContainers.copyApp.securityContext }}
@@ -175,7 +175,7 @@ spec:
         {{- end }}
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ include "socket-firewall.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.securityContext }}
           securityContext:

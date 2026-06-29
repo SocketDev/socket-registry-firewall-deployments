@@ -3,10 +3,10 @@
 # Image configuration
 image:
   repository: socketdev/socket-registry-firewall
-  # Defaults to the latest published image so deployments pick up new releases
-  # without a chart bump. Pin a version for reproducibility, e.g. tag: "1.1.327".
-  tag: "1.1.341"
-  # Always (not IfNotPresent) so "latest" actually refreshes on pod restart.
+  # Leave empty to track the chart's appVersion (Chart.yaml), which is the single
+  # source of truth for the firewall version. Set a value here only to override
+  # the pinned version, e.g. tag: "1.1.327".
+  tag: ""
   pullPolicy: Always
 
 # Image pull secrets for private registries

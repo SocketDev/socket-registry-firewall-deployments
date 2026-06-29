@@ -22,6 +22,15 @@ Create a default fully qualified app name.
 {{- end }}
 
 {{/*
+Fully-qualified firewall image reference.
+The tag defaults to the chart's appVersion so the firewall version is defined in
+exactly one place (Chart.yaml appVersion). Override via image.tag in values.yaml.
+*/}}
+{{- define "socket-firewall.image" -}}
+{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "socket-firewall.chart" -}}

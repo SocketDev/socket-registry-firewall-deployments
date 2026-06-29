@@ -3,7 +3,9 @@ name: socket-firewall
 description: Socket.dev Registry Firewall - Block vulnerable packages before they reach your cluster
 type: application
 version: 0.5.0
-appVersion: "1.1.341"
+# appVersion is the single source of truth for the firewall image version.
+# image.tag in values.yaml defaults to this (see templates/_helpers.tpl).
+appVersion: "1.1.346"
 keywords:
   - security
   - supply-chain
