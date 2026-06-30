@@ -3,10 +3,10 @@
 # Image configuration
 image:
   repository: socketdev/socket-registry-firewall
-  # Defaults to the latest published image so deployments pick up new releases
-  # without a chart bump. Pin a version for reproducibility, e.g. tag: "1.1.327".
-  tag: "1.1.346"
-  # Always (not IfNotPresent) so "latest" actually refreshes on pod restart.
+  # Leave empty to track the chart's appVersion (Chart.yaml), which is the single
+  # source of truth for the firewall version. Set a value here only to override
+  # the pinned version, e.g. tag: "1.1.327".
+  tag: ""
   pullPolicy: Always
 
 # Image pull secrets for private registries
@@ -431,6 +431,22 @@ tolerations: []
 
 # Affinity
 affinity: {}
+
+# Topology spread constraints (evenly distribute replicas across failure domains
+# such as zones or nodes). Preferred over soft pod anti-affinity for even spreading.
+# Empty by default; only takes effect with replicaCount > 1 or autoscaling enabled.
+# The base field is GA since Kubernetes 1.19 (universally available). The optional
+# matchLabelKeys field needs Kubernetes 1.27+ (satisfied by all current EKS/GKE versions).
+topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway   # use DoNotSchedule for a hard guarantee
+  #   labelSelector:
+  #     matchLabels:
+  #       app.kubernetes.io/name: socket-firewall
+  #   # matchLabelKeys requires Kubernetes 1.27+
+  #   # matchLabelKeys:
+  #   #   - pod-template-hash
 
 # Extra containers to run alongside the firewall (e.g., auth sidecars, log collectors)
 extraContainers: []

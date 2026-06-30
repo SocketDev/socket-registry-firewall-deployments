@@ -14,7 +14,9 @@ replicaCount: 2
 
 image:
   repository: socketdev/socket-registry-firewall
-  tag: "1.1.346"   # pin; do not use :latest for a security product
+  # tag intentionally omitted: it inherits the chart's appVersion (helm/Chart.yaml),
+  # the single source of truth for the firewall version. Never use :latest for a
+  # security product. Set a value here only to override the pinned version.
 
 socket:
   # Injected at install time from AWS Secrets Manager by the CloudFormation
