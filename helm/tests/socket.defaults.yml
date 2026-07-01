@@ -1,0 +1,429 @@
+# VENDORED COPY -- do not edit by hand.
+# Source: SocketDev/socket-nginx-firewall @ main:socket.defaults.yml
+# Refresh with:
+#   gh api repos/SocketDev/socket-nginx-firewall/contents/socket.defaults.yml \
+#     --jq '.content' | base64 -d > helm/tests/socket.defaults.yml
+# Used by tests/validate_config_coverage.py to assert the chart can render an
+# arbitrary, complete socket.yml with zero dropped keys.
+#
+# socket.defaults.yml -- comprehensive reference of every configuration key
+# socket-nginx-firewall reads from socket.yml, with each value set to the
+# default the code applies when the key is omitted.
+#
+# Defaults are sourced from:
+#   - socket-firewall/config-tool/socket_proxy_config/config/__init__.py (export_to_env)
+#   - socket-firewall/config-tool/socket_proxy_config/cli.py
+#   - socket-firewall/config-tool/socket_proxy_config/forward_proxy.py
+#   - socket-firewall/config-tool/socket_proxy_config/path_routing/__init__.py
+#   - socket-firewall/config-tool/socket_proxy_config/discovery/daemon.py
+#   - socket-firewall/config-tool/socket_proxy_config/cooldown/daemon.py
+#   - socket-firewall/config-tool/socket_proxy_config/cooldown/private_registry.py
+#
+# String fields whose default is an empty string and whose meaning is
+# deployment-specific (paths, hostnames, tokens, etc.) are filled with a
+# `{key_name}_value` placeholder rather than left blank. Lists/maps shaped
+# by the operator (routes, registries) carry a single example entry.
+
+
+# ============================================================================
+# socket -- Socket.dev API client + decision behavior
+# ============================================================================
+socket:
+  api_url: https://api.socket.dev
+  api_ssl_verify: true  # verify outbound TLS to Socket API (set false to disable)
+  api_ssl_ca_cert: api_ssl_ca_cert_value  # override per-request CA for API calls (leave empty to use ssl.ca_cert bundle)
+  upstream_ssl_verify: true  # verify outbound TLS to upstream registries (defaults to api_ssl_verify)
+  upstream_ssl_ca_cert: upstream_ssl_ca_cert_value  # override per-request CA for upstream (leave empty to use ssl.ca_cert bundle)
+
+  # Outbound HTTP proxy applied to Socket API + registry traffic.
+  outbound_proxy: outbound_proxy_value
+  no_proxy: no_proxy_value          # comma-separated host list
+
+  # Fail-open / strict-mode toggles.
+  fail_open: true                   # allow on Socket API failure (false = block)
+  fail_open_unscanned: true         # allow packages Socket has not yet scanned
+
+  # Remote config (Socket dashboard wholesale overrides socket.yml).
+  use_remote_config: false
+  deployment: deployment_value
+  config_refresh_interval: 60s
+
+  # Client auth gate -- bearer token.
+  # bearer_token_type: "string" (literal token) or "env" (env var name).
+  bearer_token: bearer_token_value
+  bearer_token_type: string
+
+  # Client auth gate -- HTTP basic auth.
+  basic_auth_username: basic_auth_username_value
+  basic_auth_password: basic_auth_password_value
+
+  # Token guarding the authenticated health endpoint. Falls back to the
+  # SOCKET_HEALTH_API_TOKEN env var; empty leaves the endpoint unauthenticated.
+  health_api_token: health_api_token_value
+
+  # Telemetry. v1 is batched (default); v0 is per-event legacy.
+  telemetry_enabled: true
+  telemetry_api_version: v1
+
+  # Include the ignore_reason field in decision events sent to Socket.
+  save_ignore_reason: false
+
+  # Request correlation header (echoed in logs/telemetry).
+  request_id_header: X-Socket-Request-ID
+
+  # Add an X-Socket-Unscanned header to allowed unscanned packages.
+  expose_unscanned_header: false
+
+  # Logging.
+  log_level: info                   # error | warn | info | debug — nginx error_log threshold
+  log_max_body_size: 3900           # bytes per SOCKET_DECISION line (0 disables splitting)
+  log_no_route: true                # emit access logs for NO_ROUTE requests
+  debug_logging_enabled: false      # auto-enabled when log_level=debug
+  debug_user_agent_filter: debug_user_agent_filter_value  # glob, e.g. "*pip*"
+
+  # Per-action log levels for SOCKET_DECISION console output.
+  # Each action maps to an ngx.log level; the global log_level controls the
+  # nginx error_log threshold that gates which messages pass through.
+  # Valid values: error | warn | notice | info | debug
+  block_log_level: error            # block/error decisions (visible at all thresholds)
+  warn_log_level: warn              # warn decisions
+  monitor_log_level: notice         # monitor decisions (visible by default)
+  ignore_log_level: debug           # ignore decisions (suppressed by default)
+
+  # Socket API read timeout (seconds). If not set, uses proxy.read_timeout.
+  # API calls should be much faster than large downloads — set this lower to
+  # prevent workers from being stuck on slow/hung API responses.
+  # api_read_timeout: 30
+
+  # Rewrite download/package URLs in metadata responses (e.g. Cargo config.json).
+  rewrite_package_urls: true
+
+  # Ecosystems where recentlyPublished alerts are enforced. Empty list = enforced
+  # globally per Socket API severity. Valid: npm, pypi, maven, cargo, rubygems,
+  # nuget, go, conda, openvsx.
+  recently_published_enabled_ecosystems: []
+
+  # Per-ecosystem overrides. Each entry recognizes:
+  #   allow_unknown          -- override fail_open_unscanned for this ecosystem
+  #   use_private_created_at -- use upstream created_at when Socket Purl/Cooldown
+  #                             API has no record for the package
+  ecosystem_params:
+    conda:
+      use_private_created_at: true
+      allow_unknown: true
+
+
+# ============================================================================
+# cache -- Lua cache freshness window (seconds)
+# ============================================================================
+cache:
+  ttl: 600
+  revalidation_lock_lease_seconds: 0
+  revalidation_jitter_seconds: 120
+  revalidation_async: true
+
+
+# ============================================================================
+# keepalive_timeout -- top-level nginx keepalive (seconds)
+# ============================================================================
+keepalive_timeout: 65
+
+
+# ============================================================================
+# proxy -- upstream proxy tuning (registry/API connections)
+# ============================================================================
+proxy:
+  connect_timeout: 90
+  send_timeout: 90
+  read_timeout: 300
+  buffer_size: 16k
+  buffers_count: 8
+  buffers_size: 16k
+  busy_buffers_size: 32k
+
+  # Request headers to strip before forwarding to upstream (case-insensitive).
+  # Applied by the Lua streaming proxy. Empty list = strip nothing.
+  # e.g. ["Authorization", "Cookie"]
+  strip_request_headers: []
+
+
+# ============================================================================
+# nginx -- core nginx server settings
+# ============================================================================
+nginx:
+  worker_processes: auto
+  worker_connections: 1024
+  worker_rlimit_nofile: 2048
+  keepalive_pool_size: 64
+
+  types_hash_max_size: 2048
+  client_max_body_size: 100M
+  accept_mutex: off
+  access_log_buffer: 64k
+
+  # Enable HTTP/2 on the TLS (HTTPS) listener.
+  http2: true
+
+  # DNS resolver -- 127.0.0.11 for Docker, kube-dns... for Kubernetes.
+  resolver: resolver_value
+  resolver_timeout: 5s
+
+  gzip:
+    enabled: on
+    min_length: 1024
+
+  open_file_cache:
+    max: 1000
+    inactive: 60s
+
+  proxy_cache:
+    enabled: on
+    path: /tmp/nginx_cache
+    size: 100m
+    inactive: 60m
+
+
+# ============================================================================
+# ports -- listen ports
+# ============================================================================
+ports:
+  http: 80
+  https: 443
+  disable_http: false
+  disable_https: false
+
+
+# ============================================================================
+# ssl -- server TLS certificate paths
+# ============================================================================
+ssl:
+  cert: /etc/nginx/ssl/fullchain.pem
+  key: /etc/nginx/ssl/privkey.pem
+  ca_cert: ca_cert_value            # optional CA bundle merged into trust store
+
+
+# ============================================================================
+# lua -- Lua shared-memory zone sizes
+# ============================================================================
+lua:
+  cache_size: 10m
+  stats_size: 1m
+
+
+# ============================================================================
+# forward_proxy -- HTTP CONNECT forward-proxy listener (disabled by default)
+# ============================================================================
+# Terminates CONNECT tunnels (e.g. from Netskope/Zscaler-style CASBs) so the
+# inner request can be scanned. Requires nginx built with stream{} +
+# ngx_stream_lua_module (the OpenResty image bundles both) and is incompatible
+# with ports.disable_https: true.
+forward_proxy:
+  enabled: false
+  port: 3128                        # CONNECT listener port
+  proxy_protocol_port: 8081         # internal loopback PROXY-protocol port that terminates TLS
+  max_connections_per_source: 64    # concurrent tunnels allowed per client IP
+  max_tunnel_lifetime_seconds: 600  # hard deadline (seconds) before a tunnel is force-closed
+
+
+# ============================================================================
+# redis -- shared cache across firewall instances (disabled by default)
+# ============================================================================
+redis:
+  enabled: false
+  host: redis
+  port: 6379
+  password: password_value
+  db: 0
+  ttl: 86400                        # total key lifetime (stale-while-revalidate window)
+  ssl: false
+  ssl_verify: true  # defaults to true when redis.ssl is enabled
+  ssl_server_name: ssl_server_name_value
+  ssl_ca_cert: ssl_ca_cert_value
+  ssl_client_cert: ssl_client_cert_value
+  ssl_client_key: ssl_client_key_value
+
+
+# ============================================================================
+# splunk -- Splunk HEC event delivery (disabled by default)
+# ============================================================================
+splunk:
+  enabled: false
+  hec_url: hec_url_value
+  hec_token: hec_token_value
+  source: socket-firewall
+  sourcetype: socket:firewall:event
+  index: index_value
+  ssl_verify: false
+  timeout: 5000
+  batch_size: 1
+
+
+# ============================================================================
+# webhook -- HTTP webhook event delivery (disabled by default)
+# ============================================================================
+webhook:
+  enabled: false
+  url: url_value
+  auth_header: auth_header_value
+  ssl_verify: false
+  timeout: 5000
+  on_block: true
+  on_warn: true
+  on_monitor: true
+  on_ignore: true
+
+  # Batch events into fewer HTTP deliveries instead of one POST per event.
+  batch_enabled: false
+  batch_size: 524288                # flush when the buffered payload reaches this many bytes
+  batch_period: 5                   # flush at least this often (seconds)
+
+
+# ============================================================================
+# path_routing -- path-based routing (e.g. /npm, /pypi, /artifactory/...)
+# ============================================================================
+path_routing:
+  enabled: false
+  domain: domain_value              # FQDN this firewall answers on
+  # Additional hostnames this server answers to, beyond `domain`. Entries may be
+  # exact names, nginx wildcards (*.cluster.example.com), or a regex (~^.+$) for a
+  # catch-all; they are appended to server_name. Lets per-cluster hostnames behind a
+  # load balancer be served instead of 404ing. Empty = answer only on `domain`.
+  allowed_domain: []
+  mode: local                       # local | artifactory | nexus | downstream
+  config_mode: downstream           # downstream | middle | upstream
+  upstream_fqdn: upstream_fqdn_value
+  rewrite_scheme: https
+  client_rewrite_scheme: client_rewrite_scheme_value  # falls back to rewrite_scheme
+  # Host that package URLs are rewritten to. false (default) rewrites with `domain`,
+  # so downloads route back through the primary host / load balancer even when the
+  # request arrived on an allowed_domain host; true rewrites with the incoming Host.
+  use_incoming_domain: false
+  forward_for_domain: true
+  override_location_rewrite: false
+  override_port_http: override_port_http_value
+  override_port_https: override_port_https_value
+
+  # Optional CSV file of routes; merged with the `routes` list below.
+  routes_file: routes_file_value
+
+  # Free-form list of routes. Required keys per entry: `path`, `registry`,
+  # and (outside Artifactory mode) `upstream`.
+  routes:
+    - path: /npm
+      upstream: https://registry.npmjs.org
+      registry: npm
+      upstream_type: upstream_type_value      # "" or "artifactory"
+      upstream_host: upstream_host_value      # explicit upstream Host header
+      mode: rewrite                            # "rewrite" or "proxy"
+      upstream_token: upstream_token_value     # env var name (bearer auth)
+      base_url: base_url_value                 # artifactory mode only
+      artifactory_repo: artifactory_repo_value # artifactory mode only
+      # Optional: tie this route to external_registry_cooldown enforcement.
+      cooldown_name: cooldown_name_value       # matches an external_registry_cooldown.registries[].name
+      cooldown_ecosystem: cooldown_ecosystem_value # gradle, pypi, conda, ... (resolved from cooldown_name if omitted)
+      repo_key: repo_key_value                 # private-registry repo key (defaults to cooldown_name)
+
+  # Optional auto-discovery of upstream repos in a Nexus/Artifactory instance.
+  private_registry:
+    type: type_value                # 'nexus' or 'artifactory'
+    api_url: api_url_value
+    api_key: api_key_value          # also overridable via PRIVATE_REGISTRY_KEY env var
+    username: username_value
+    password: password_value
+    interval: 5m
+    include_pattern: .*
+    exclude_pattern: ^$
+    ignore_ssl_errors: false
+    supported_ecosystems_only: true
+    include_virtual: false          # Nexus only
+
+
+# ============================================================================
+# registries -- domain-based routing (subdomain → registry/upstream)
+# ============================================================================
+# Map of registry-name → config. Each entry's `registry` defaults to the map
+# key when omitted. Repeat the block below for npm, pypi, maven, cargo,
+# rubygems, nuget, nugetv2, go, conda, openvsx, etc.
+registries:
+  npm:
+    domains:
+      - npm_domain_value
+    upstream: https://registry.npmjs.org
+    registry: npm
+    upstream_token: upstream_token_value  # env var name (bearer auth, optional)
+
+
+# ============================================================================
+# metadata_filtering -- filter blocked/warned packages from metadata responses
+# ============================================================================
+metadata_filtering:
+  enabled: false
+  filter_blocked: true
+  filter_warn: false
+  include_unchecked_versions: true
+  max_versions: 100                 # per-package version cap
+  cache_ttl: 3600
+  batch_size: 100                   # max PURLs per batch (capped at 100)
+  max_body_size: 500m
+  excluded_ecosystems: []
+  prefetch_enabled: true
+  prefetch_ttl: 600
+  prefetch_max_concurrent: 2
+  prefetch_batch_concurrency: 4
+  metadata_concurrent_batch: 1        # max concurrent PURL batch API calls per inline metadata request
+  # conda_prefetch_archs defaults (when not specified): linux-64, linux-aarch64, osx-64, osx-arm64, win-64, noarch
+  conda_prefetch_archs: []          # empty = use defaults; set to override which archs to prefetch
+  max_concurrent: 3                 # per-worker concurrent metadata filter ops (prevents saturation under parallel load)
+  package_filter_timeout: 60        # seconds — total time budget per metadata filter operation; kills in-flight API calls if exceeded
+  package_filter_retry: 0           # retries for a failed PURL batch API call within the timeout budget (0 = no retry)
+
+
+# ============================================================================
+# external_registry_cooldown -- publish-date enforcement for unsupported ecosystems
+# ============================================================================
+external_registry_cooldown:
+  enabled: false
+  cooldown_period: 7d               # block packages published more recently than this
+  check_interval: 60s
+  redis_key_prefix: "cooldown:"
+  cache_ttl: 86400
+  # mode: empty triggers auto-detect ('api' when socket.deployment is set, else 'local')
+  mode: mode_value
+  # fallback: '' (no fallback), 'external', 'artifactory', or 'nexus'
+  fallback: fallback_value
+
+  # Free-form list of external registries to monitor.
+  registries:
+    - name: name_value
+      url: url_value
+      ecosystem: ecosystem_value    # gradle, pypi, conda, ...
+      auth_type: none               # 'none' | 'basic' | 'bearer'
+      auth_credential: auth_credential_value  # env var name holding the credential
+      rate_limit_header: rate_limit_header_value
+      ignore_ssl_errors: false
+      timeout: 30
+      # cooldown_period: 7d         # optional per-registry override
+
+  # Optional: enable cooldown queries against the configured private registry.
+  # When disabled, the cooldown daemon falls back to path_routing.private_registry
+  # credentials for upstream auth.
+  private_registry:
+    enabled: false
+    auth_type: bearer_token         # 'bearer_token' | 'basic'
+    auth_credential: auth_credential_value  # env var name
+    source: auto                    # 'auto' | 'artifactory' | 'nexus'
+
+    # Auto-discovery filters for repos pulled from the private registry.
+    include_unsupported_only: true  # only enforce cooldown on ecosystems Socket doesn't natively support
+    include_pattern: .*             # regex: repo keys/names to include
+    exclude_pattern: ^$             # regex: repo keys/names to exclude
+    # cooldown_period: 7d           # optional override applied to discovered repos
+
+
+# ============================================================================
+# client_ip -- real-ip from headers (for deployments behind LBs/proxies)
+# ============================================================================
+client_ip:
+  header: header_value              # e.g. "X-Forwarded-For"; empty disables realip
+  trusted_proxies: []               # list of CIDRs allowed to set the header
+  recursive: true                   # walk X-Forwarded-For to find originating IP

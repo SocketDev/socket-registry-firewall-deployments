@@ -64,6 +64,13 @@ socket:
   cacheTtl: 600
   # Log level (default: info). Valid: error, warn, info, debug
   logLevel: ""
+  # Per-action log levels for SOCKET_DECISION console output.
+  # Valid: error, warn, notice, info, debug. Empty = firewall default
+  # (block=error, warn=warn, monitor=notice, ignore=debug).
+  blockLogLevel: ""
+  warnLogLevel: ""
+  monitorLogLevel: ""
+  ignoreLogLevel: ""
   # Max bytes per SOCKET_DECISION log line (0 disables splitting)
   logMaxBodySize: 3900
   # Emit access logs for NO_ROUTE requests
@@ -72,10 +79,34 @@ socket:
   debugLoggingEnabled: false
   # Rewrite download/package URLs in metadata responses (e.g. Cargo config.json)
   rewritePackageUrls: true
+  # Cache revalidation (stale-while-revalidate) tuning. Empty = firewall default
+  # (lease=0, jitter=120s, async=true). See cache.ttl via socket.cacheTtl above.
+  cacheRevalidationLockLeaseSeconds: ""
+  cacheRevalidationJitterSeconds: ""
+  cacheRevalidationAsync: ""
   # Ecosystems where recentlyPublished alerts are enforced.
   # Empty list = enforced globally per Socket API severity.
   # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx
   recentlyPublishedEnabledEcosystems: []
+
+  # --- Raw config passthrough (closes any gap in the value-managed keys) ---
+  # configOverride: replace the generated socket.yml WHOLESALE with this map.
+  # When non-empty, every other chart value that feeds socket.yml is ignored.
+  # Use this to render an arbitrary, complete socket.yml (see socket.defaults.yml
+  # reference) without waiting for the chart to add first-class keys.
+  configOverride: {}
+  # extraConfig: a map deep-merged OVER the chart-generated config (extraConfig
+  # wins on conflicts). Use this to set keys the chart does not expose as
+  # first-class values, e.g.:
+  #   extraConfig:
+  #     socket:
+  #       api_url: https://api.socket.example
+  #       outbound_proxy: http://proxy.corp:3128
+  #     ports:
+  #       disable_http: true
+  #     ssl:
+  #       ca_cert: /etc/nginx/ssl/corp-ca.pem
+  extraConfig: {}
 
 # Upstream auth tokens. Two modes:
 # If set, chart provisions a Secret <release>-upstream-tokens with these keys;
@@ -128,11 +159,14 @@ pathRouting:
 # Domain-based routing (alternative — each registry gets its own subdomain)
 # Only used when pathRouting.enabled is false.
 # upstreamToken / upstreamTokenSecret on a registry enable upstream auth.
+# upstream (optional) overrides the default public upstream for that registry
+# (e.g. point npm at an internal mirror).
 registries:
   npm:
     enabled: false
     domains:
       - npm.company.local
+    # upstream: https://registry.npmjs.org
     # upstreamToken: NPM_AUTH_TOKEN
     # upstreamTokenSecret: socket-upstream-tokens
   pypi:
@@ -199,6 +233,11 @@ nginx:
   # Access log buffer setting (default: not set, nginx uses its default)
   # Set to "off" to flush access log lines immediately to stdout
   accessLogBuffer: "off"
+  # DNS resolver for upstream name resolution. Empty = firewall auto-detect
+  # (127.0.0.11 for Docker; the chart otherwise relies on the image default).
+  # Set explicitly for Kubernetes if needed, e.g. "kube-dns.kube-system.svc.cluster.local".
+  resolver: ""
+  resolverTimeout: ""
 
 # Lua shared-memory zone sizes (raise if cache/stats dictionaries fill up)
 lua:
@@ -250,6 +289,69 @@ metadataFiltering:
   maxVersions: 100
   cacheTtl: 3600
   batchSize: 4000
+  # Optional tuning knobs. Empty = firewall default (see socket.defaults.yml).
+  # Max response body the filter will parse (e.g. "500m").
+  maxBodySize: ""
+  # Ecosystems to skip filtering for (e.g. [go, conda]).
+  excludedEcosystems: []
+  # Background prefetch of metadata decisions to keep the cache warm (CE-274).
+  prefetchEnabled: ""
+  prefetchTtl: ""
+  prefetchMaxConcurrent: ""
+  prefetchBatchConcurrency: ""
+  # Max concurrent PURL batch API calls per inline metadata request.
+  metadataConcurrentBatch: ""
+  # Conda archs to prefetch (empty = firewall defaults: linux-64, linux-aarch64,
+  # osx-64, osx-arm64, win-64, noarch).
+  condaPrefetchArchs: []
+  # Per-worker concurrent metadata filter ops (prevents saturation under load).
+  maxConcurrent: ""
+  # Total time budget (seconds) per metadata filter op; kills in-flight API calls.
+  packageFilterTimeout: ""
+  # Retries for a failed PURL batch API call within the timeout budget.
+  packageFilterRetry: ""
+
+# External registry cooldown — publish-date enforcement for ecosystems Socket
+# does not natively support (e.g. gradle via Artifactory/Nexus). Blocks packages
+# published more recently than cooldownPeriod. See socket.defaults.yml reference.
+externalRegistryCooldown:
+  enabled: false
+  # How recently-published a package may be before it is blocked (e.g. "7d").
+  cooldownPeriod: ""
+  # How often the cooldown daemon refreshes state (e.g. "60s").
+  checkInterval: ""
+  redisKeyPrefix: ""
+  cacheTtl: ""
+  # mode: empty = auto-detect ("api" when socket.deployment is set, else "local").
+  mode: ""
+  # fallback: "" (none), "external", "artifactory", or "nexus".
+  fallback: ""
+  # External registries to monitor. Each entry:
+  #   name, url, ecosystem (gradle, pypi, conda, ...),
+  #   authType (none|basic|bearer), authCredential (env var name),
+  #   rateLimitHeader, ignoreSslErrors, timeout, cooldownPeriod (optional override).
+  registries: []
+  # - name: internal-gradle
+  #   url: https://artifactory.corp/artifactory/gradle-remote
+  #   ecosystem: gradle
+  #   authType: bearer
+  #   authCredential: ARTIFACTORY_TOKEN
+  #   timeout: 30
+  # Optional cooldown queries against the configured private registry.
+  privateRegistry:
+    enabled: false
+    # authType: "bearer_token" or "basic".
+    authType: ""
+    # Env var name holding the credential.
+    authCredential: ""
+    # source: "auto", "artifactory", or "nexus".
+    source: ""
+    # Only enforce cooldown on ecosystems Socket doesn't natively support.
+    includeUnsupportedOnly: ""
+    # Regex filters for auto-discovered repos.
+    includePattern: ""
+    excludePattern: ""
+    cooldownPeriod: ""
 
 # Redis caching for Socket API lookups
 redis:
@@ -266,6 +368,8 @@ redis:
   ttl: 86400
   ssl: false
   sslVerify: true
+  # TLS SNI server name to present to Redis (managed services with SNI routing).
+  sslServerName: ""
   # File path inside the container for the Redis CA certificate.
   # Use sslCaCertExistingSecret below to have the chart mount a secret
   # for you. Set sslCaCert directly only if you are delivering the file
@@ -300,6 +404,11 @@ splunk:
   existingSecretKey: "SPLUNK_HEC_TOKEN"
   index: "sfw-hec"
   source: "sfw-event"
+  # Optional tuning. Empty = firewall default (see socket.defaults.yml).
+  sourcetype: ""
+  sslVerify: ""
+  timeout: ""
+  batchSize: ""
 
 # Webhook event delivery (fires on package decisions)
 webhook:

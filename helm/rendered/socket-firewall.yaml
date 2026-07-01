@@ -1,0 +1,326 @@
+---
+# Source: socket-firewall/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: socket-firewall
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: socket-firewall
+      app.kubernetes.io/instance: socket-firewall
+
+---
+# Source: socket-firewall/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: socket-firewall
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+
+---
+# Source: socket-firewall/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: socket-firewall-api-token
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+stringData:
+  SOCKET_SECURITY_API_TOKEN: "REPLACE_WITH_SOCKET_API_TOKEN"
+
+---
+# Source: socket-firewall/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: socket-firewall-config
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+data:
+  socket.yml: |
+    # Socket API configuration
+    socket:
+      fail_open: true
+      fail_open_unscanned: true
+      use_remote_config: false
+      config_refresh_interval: "60s"
+      bearer_token_type: "string"
+      telemetry_enabled: true
+      telemetry_api_version: "v1"
+      save_ignore_reason: false
+      request_id_header: "X-Socket-Request-ID"
+      expose_unscanned_header: false
+      log_max_body_size: 3900
+      log_no_route: true
+      debug_logging_enabled: false
+      rewrite_package_urls: true
+    
+    # Cache configuration
+    cache:
+      ttl: 600
+    
+    # Proxy configuration
+    proxy:
+      buffer_size: 16k
+      buffers_count: 8
+      buffers_size: 16k
+      connect_timeout: 60
+      send_timeout: 60
+      read_timeout: 60
+    
+    nginx:
+      worker_processes: 4
+      worker_connections: 8192
+      access_log_buffer: "off"
+    path_routing:
+      enabled: true
+      domain: sfw.example.com
+      routes:
+        - path: /npm
+          upstream: https://registry.npmjs.org
+          registry: npm
+        - path: /pypi
+          upstream: https://pypi.org
+          registry: pypi
+    
+    lua:
+      cache_size: "10m"
+      stats_size: "1m"
+
+---
+# Source: socket-firewall/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: socket-firewall
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+
+---
+# Source: socket-firewall/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: socket-firewall
+  labels:
+    helm.sh/chart: socket-firewall-0.5.0
+    app.kubernetes.io/name: socket-firewall
+    app.kubernetes.io/instance: socket-firewall
+    app.kubernetes.io/version: "1.1.346"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: socket-firewall
+      app.kubernetes.io/instance: socket-firewall
+  template:
+    metadata:
+      annotations:
+        checksum/config: a95575fc01bbc52070bacb76ef4015b78089e859309e1b66fea6000b03c06b42
+      labels:
+        app.kubernetes.io/name: socket-firewall
+        app.kubernetes.io/instance: socket-firewall
+    spec:
+      serviceAccountName: socket-firewall
+      initContainers:
+        - name: copy-app
+          image: "socketdev/socket-registry-firewall:1.1.346"
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c", "cp -r /app/. /mnt/app/"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: app-data
+              mountPath: /mnt/app
+        - name: generate-certs
+          image: "alpine/openssl:3.3.2"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Generate self-signed certificate for all configured domains
+              DOMAINS=""
+              DOMAINS="DNS:sfw.example.com"
+              # Remove leading comma
+              DOMAINS="${DOMAINS#,}"
+
+              # Generate CA key and certificate
+              openssl genrsa -out /certs/ca.key 2048
+              openssl req -x509 -new -nodes -key /certs/ca.key -sha256 -days 365 \
+                -out /certs/ca.crt -subj "/CN=Socket Firewall CA"
+
+              # Generate server key
+              openssl genrsa -out /certs/tls.key 2048
+
+              # Generate CSR
+              openssl req -new -key /certs/tls.key -out /certs/server.csr \
+                -subj "/CN=socket-firewall"
+
+              # Create extensions file
+              cat > /certs/ext.cnf << EOF
+              authorityKeyIdentifier=keyid,issuer
+              basicConstraints=CA:FALSE
+              keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+              subjectAltName = $DOMAINS
+              EOF
+
+              # Sign server certificate with CA
+              openssl x509 -req -in /certs/server.csr -CA /certs/ca.crt -CAkey /certs/ca.key \
+                -CAcreateserial -out /certs/tls.crt -days 365 -sha256 -extfile /certs/ext.cnf
+
+              # Create fullchain (server + CA)
+              cat /certs/tls.crt /certs/ca.crt > /certs/fullchain.pem
+              cp /certs/tls.key /certs/privkey.pem
+
+              echo "Certificates generated for: $DOMAINS"
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /certs
+      containers:
+        - name: socket-firewall
+          image: "socketdev/socket-registry-firewall:1.1.346"
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          env:
+            - name: SOCKET_SECURITY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: socket-firewall-api-token
+                  key: SOCKET_SECURITY_API_TOKEN
+            - name: HTTP_PORT
+              value: "80"
+            - name: HTTPS_PORT
+              value: "443"
+            - name: CONFIG_FILE
+              value: /app/socket.yml
+          volumeMounts:
+            - name: app-data
+              mountPath: /app
+            - name: config
+              mountPath: /app/socket.yml
+              subPath: socket.yml
+              readOnly: true
+            - name: tls-certs
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-logs
+              mountPath: /var/log/nginx
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: "4"
+              memory: 8Gi
+            requests:
+              cpu: "2"
+              memory: 8Gi
+      volumes:
+        - name: app-data
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: socket-firewall-config
+        - name: tls-certs
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

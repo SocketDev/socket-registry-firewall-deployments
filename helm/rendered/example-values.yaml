@@ -1,0 +1,17 @@
+# Input values used to generate the reference raw-Kubernetes manifests in this
+# directory (see generate.sh). A representative path-routing deployment.
+# Replace the API token before applying, or drop socket.apiToken and supply
+# socket.existingSecret instead.
+socket:
+  apiToken: "REPLACE_WITH_SOCKET_API_TOKEN"
+
+pathRouting:
+  enabled: true
+  domain: sfw.example.com
+  routes:
+    - path: /npm
+      upstream: https://registry.npmjs.org
+      registry: npm
+    - path: /pypi
+      upstream: https://pypi.org
+      registry: pypi

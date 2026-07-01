@@ -1,0 +1,82 @@
+# Kitchen-sink values — exercises every first-class key promoted in Phase 2 so
+# tests/validate_config_coverage.py can confirm the chart wires them into
+# socket.yml. Long-tail keys (reachable only via socket.extraConfig /
+# socket.configOverride) are covered by the passthrough tests, not here.
+socket:
+  logLevel: debug
+  blockLogLevel: error
+  warnLogLevel: warn
+  monitorLogLevel: notice
+  ignoreLogLevel: debug
+  cacheRevalidationLockLeaseSeconds: 0
+  cacheRevalidationJitterSeconds: 120
+  cacheRevalidationAsync: true
+  recentlyPublishedEnabledEcosystems: [npm, pypi]
+
+nginx:
+  resolver: "kube-dns.kube-system.svc.cluster.local"
+  resolverTimeout: "5s"
+
+pathRouting:
+  enabled: true
+  domain: sfw.example.com
+  routes:
+    - path: /npm
+      upstream: https://registry.npmjs.org
+      registry: npm
+      upstreamToken: NPM_AUTH_TOKEN
+
+metadataFiltering:
+  enabled: true
+  maxBodySize: "500m"
+  excludedEcosystems: [go]
+  prefetchEnabled: true
+  prefetchTtl: 600
+  prefetchMaxConcurrent: 2
+  prefetchBatchConcurrency: 4
+  metadataConcurrentBatch: 1
+  condaPrefetchArchs: [linux-64, noarch]
+  maxConcurrent: 3
+  packageFilterTimeout: 60
+  packageFilterRetry: 0
+
+externalRegistryCooldown:
+  enabled: true
+  cooldownPeriod: 7d
+  checkInterval: 60s
+  redisKeyPrefix: "cooldown:"
+  cacheTtl: 86400
+  mode: local
+  fallback: external
+  registries:
+    - name: internal-gradle
+      url: https://artifactory.corp/artifactory/gradle-remote
+      ecosystem: gradle
+      authType: bearer
+      authCredential: ARTIFACTORY_TOKEN
+      rateLimitHeader: X-RateLimit-Remaining
+      ignoreSslErrors: false
+      timeout: 30
+      cooldownPeriod: 14d
+  privateRegistry:
+    enabled: true
+    authType: bearer_token
+    authCredential: PRIVATE_REGISTRY_KEY
+    source: auto
+    includeUnsupportedOnly: true
+    includePattern: ".*"
+    excludePattern: "^$"
+    cooldownPeriod: 7d
+
+redis:
+  enabled: true
+  ssl: true
+  sslServerName: redis.example.com
+
+splunk:
+  enabled: true
+  hecUrl: https://splunk.example.com:8088
+  sourcetype: "socket:firewall:event"
+  sslVerify: false
+  timeout: 5000
+  batchSize: 1

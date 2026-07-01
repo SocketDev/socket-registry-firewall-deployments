@@ -1,0 +1,16 @@
+# Patterns to ignore when building Helm packages.
+# VCS / OS / editor cruft
+.git/
+.gitignore
+.github/
+.DS_Store
+*.swp
+*.swo
+*.tmp
+*.bak
+.idea/
+.vscode/
+
+# Chart-development artifacts not meant for the published package
+tests/
+rendered/

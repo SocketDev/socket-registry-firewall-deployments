@@ -111,9 +111,25 @@ registries:
 | `registries.<name>.domains` | Custom domains for registry | `[]` |
 | **Integrations** | | |
 | `metadataFiltering.enabled` | Filter blocked packages from metadata | `false` |
+| `metadataFiltering.prefetchEnabled` | Warm metadata decisions in the background (CE-274). Empty = firewall default | `""` |
+| `metadataFiltering.maxConcurrent` | Per-worker concurrent metadata filter ops | `""` |
+| `metadataFiltering.packageFilterTimeout` | Time budget (s) per metadata filter op | `""` |
+| `externalRegistryCooldown.enabled` | Publish-date enforcement for unsupported ecosystems (e.g. gradle) | `false` |
+| `externalRegistryCooldown.cooldownPeriod` | Block packages published more recently than this (e.g. `7d`) | `""` |
+| `externalRegistryCooldown.registries` | External registries to monitor (name/url/ecosystem/auth) | `[]` |
+| `externalRegistryCooldown.privateRegistry.enabled` | Cooldown queries against a private (Artifactory/Nexus) registry | `false` |
 | `redis.enabled` | Enable Redis caching for API lookups | `false` |
+| `redis.sslServerName` | TLS SNI name for managed Redis | `""` |
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
+| **Config tuning** | | |
+| `socket.blockLogLevel` / `warnLogLevel` / `monitorLogLevel` / `ignoreLogLevel` | Per-action SOCKET_DECISION log levels. Empty = firewall default | `""` |
+| `socket.cacheRevalidationJitterSeconds` | Stale-while-revalidate jitter (CE-274). Empty = firewall default | `""` |
+| `socket.cacheRevalidationAsync` | Revalidate cache entries asynchronously. Empty = firewall default | `""` |
+| `nginx.resolver` | DNS resolver for upstream name resolution | `""` |
+| **Raw config passthrough** | _see [Configuration coverage](#configuration-coverage-value-managed-vs-passthrough)_ | |
+| `socket.extraConfig` | Map deep-merged over the generated `socket.yml` (wins on conflicts) | `{}` |
+| `socket.configOverride` | Map that replaces `socket.yml` wholesale (ignores all other values) | `{}` |
 | **Infrastructure** | | |
 | `tls.generateSelfSigned` | Generate self-signed certs | `true` |
 | `tls.existingSecret` | Use existing TLS secret | `""` |
@@ -145,6 +161,78 @@ registries:
 | `initContainers.certGenerator.securityContext` | generate-certs init container security context | PSS restricted |
 
 See [values.yaml](values.yaml) for all options.
+
+### Configuration Coverage (value-managed vs passthrough)
+
+The chart renders the firewall's `socket.yml` at `/app/socket.yml`. Keys fall
+into two buckets:
+
+- **Value-managed** — exposed as first-class Helm values (the tables above and
+  in `values.yaml`). Covers the common `socket`, `cache`, `proxy`, `nginx`,
+  routing (`pathRouting` / `registries` / `dnsRouting`), `metadataFiltering`,
+  `externalRegistryCooldown`, `redis`, `splunk`, `webhook`, `lua`, `clientIp`,
+  and `forwardProxy` settings.
+- **Passthrough** — any key in the authoritative
+  [`socket.defaults.yml`](tests/socket.defaults.yml) reference that the chart
+  does not (yet) expose as a value. Set these via `socket.extraConfig` (deep
+  merge) or `socket.configOverride` (wholesale replace). This means the chart
+  can render an **arbitrary, complete `socket.yml` with zero dropped keys** —
+  no kustomize post-render step required.
+
+**`socket.extraConfig`** — deep-merged over the generated config, so you keep
+all the value-managed keys and only add/override what you need:
+
+```yaml
+socket:
+  extraConfig:
+    socket:
+      api_url: https://api.socket.internal
+      outbound_proxy: http://proxy.corp:3128
+      no_proxy: .corp,.svc
+    ports:
+      disable_http: true          # not reachable via service.* alone
+    ssl:
+      ca_cert: /etc/nginx/ssl/corp-ca.pem
+    nginx:
+      gzip:
+        enabled: "on"
+      proxy_cache:
+        enabled: "on"
+```
+
+**`socket.configOverride`** — replaces `socket.yml` entirely (every other
+config-feeding value is ignored). Use it to pin an exact, audited config:
+
+```yaml
+socket:
+  configOverride:
+    socket:
+      api_url: https://api.socket.dev
+      fail_open: false
+    cache:
+      ttl: 600
+    # ... a full socket.yml ...
+```
+
+The vendored [`socket.defaults.yml`](tests/socket.defaults.yml) documents every
+key. A CI check (`tests/validate_config_coverage.py`) renders the chart against
+it to guarantee no keys are dropped.
+
+> Note on merge semantics: `extraConfig` deep-merges maps but **replaces lists**
+> wholesale (e.g. `pathRouting.routes`). YAML-magic scalars like `on`/`off` are
+> quoted (`"on"`) so they survive as strings.
+
+### Raw Kubernetes Manifests (no Helm)
+
+Pre-rendered manifests for a representative deployment live in
+[`rendered/`](rendered/) for operators who deploy with `kubectl` instead of
+Helm, and as a reviewable reference of what the chart produces:
+
+```bash
+kubectl apply -f rendered/socket-firewall.yaml
+```
+
+Regenerate them after chart changes with `rendered/generate.sh`.
 
 ### Example Configurations
 

@@ -1,0 +1,46 @@
+name: Helm Chart Tests
+
+# Lints the chart, renders it with several value profiles, and asserts the
+# generated socket.yml can reproduce an arbitrary, complete config (validated
+# against the vendored socket.defaults.yml reference — zero dropped keys).
+
+on:
+  pull_request:
+    paths: ['helm/**', '.github/workflows/helm-test.yaml']
+  push:
+    branches: [main]
+    paths: ['helm/**']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: helm lint
+        run: helm lint helm
+
+      - name: Render default + example profiles
+        run: |
+          set -euo pipefail
+          helm template ci helm >/dev/null
+          for f in helm/examples/*.yaml; do
+            echo "Rendering with $f"
+            helm template ci helm -f "$f" >/dev/null
+          done
+          helm template ci helm -f helm/tests/kitchen-sink.values.yaml >/dev/null
+
+      - name: Validate config coverage (zero dropped keys)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 helm/tests/validate_config_coverage.py
