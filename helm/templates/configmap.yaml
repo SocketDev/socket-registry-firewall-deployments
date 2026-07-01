@@ -8,11 +8,42 @@ data:
   socket.yml: |
     # Socket API configuration
     socket:
+      {{- if .Values.socket.apiUrl }}
+      api_url: {{ .Values.socket.apiUrl | quote }}
+      {{- end }}
+      api_ssl_verify: {{ .Values.socket.apiSslVerify }}
+      {{- if .Values.socket.apiSslCaCert }}
+      api_ssl_ca_cert: {{ .Values.socket.apiSslCaCert | quote }}
+      {{- end }}
+      {{- if kindIs "bool" .Values.socket.upstreamSslVerify }}
+      upstream_ssl_verify: {{ .Values.socket.upstreamSslVerify }}
+      {{- end }}
+      {{- if .Values.socket.upstreamSslCaCert }}
+      upstream_ssl_ca_cert: {{ .Values.socket.upstreamSslCaCert | quote }}
+      {{- end }}
+      {{- if .Values.socket.outboundProxy }}
+      outbound_proxy: {{ .Values.socket.outboundProxy | quote }}
+      {{- end }}
+      {{- if .Values.socket.noProxy }}
+      no_proxy: {{ .Values.socket.noProxy | quote }}
+      {{- end }}
+      {{- if .Values.socket.deployment }}
+      deployment: {{ .Values.socket.deployment | quote }}
+      {{- end }}
       fail_open: {{ .Values.socket.failOpen }}
       fail_open_unscanned: {{ .Values.socket.failOpenUnscanned }}
       use_remote_config: {{ .Values.socket.useRemoteConfig }}
       config_refresh_interval: {{ .Values.socket.configRefreshInterval | quote }}
       bearer_token_type: {{ .Values.socket.bearerTokenType | quote }}
+      {{- if .Values.socket.basicAuthUsername }}
+      basic_auth_username: {{ .Values.socket.basicAuthUsername | quote }}
+      {{- end }}
+      {{- if .Values.socket.basicAuthPassword }}
+      basic_auth_password: {{ .Values.socket.basicAuthPassword | quote }}
+      {{- end }}
+      {{- if .Values.socket.healthApiToken }}
+      health_api_token: {{ .Values.socket.healthApiToken | quote }}
+      {{- end }}
       telemetry_enabled: {{ .Values.socket.telemetryEnabled }}
       telemetry_api_version: {{ .Values.socket.telemetryApiVersion | quote }}
       save_ignore_reason: {{ .Values.socket.saveIgnoreReason }}
@@ -25,53 +56,233 @@ data:
       {{- if .Values.socket.logLevel }}
       log_level: {{ .Values.socket.logLevel }}
       {{- end }}
+      {{- if .Values.socket.debugUserAgentFilter }}
+      debug_user_agent_filter: {{ .Values.socket.debugUserAgentFilter | quote }}
+      {{- end }}
+      {{- if kindIs "float64" .Values.socket.apiReadTimeout }}
+      api_read_timeout: {{ .Values.socket.apiReadTimeout }}
+      {{- end }}
+      {{- if .Values.socket.blockLogLevel }}
+      block_log_level: {{ .Values.socket.blockLogLevel }}
+      {{- end }}
+      {{- if .Values.socket.warnLogLevel }}
+      warn_log_level: {{ .Values.socket.warnLogLevel }}
+      {{- end }}
+      {{- if .Values.socket.monitorLogLevel }}
+      monitor_log_level: {{ .Values.socket.monitorLogLevel }}
+      {{- end }}
+      {{- if .Values.socket.ignoreLogLevel }}
+      ignore_log_level: {{ .Values.socket.ignoreLogLevel }}
+      {{- end }}
       {{- if .Values.socket.recentlyPublishedEnabledEcosystems }}
       recently_published_enabled_ecosystems:
         {{- range .Values.socket.recentlyPublishedEnabledEcosystems }}
         - {{ . }}
         {{- end }}
       {{- end }}
+      {{- if .Values.socket.ecosystemParams }}
+      ecosystem_params:
+        {{- toYaml .Values.socket.ecosystemParams | nindent 8 }}
+      {{- end }}
 
     # Cache configuration
     cache:
       ttl: {{ .Values.socket.cacheTtl }}
+      revalidation_lock_lease_seconds: {{ .Values.cache.revalidationLockLeaseSeconds }}
+      revalidation_jitter_seconds: {{ .Values.cache.revalidationJitterSeconds }}
+      revalidation_async: {{ .Values.cache.revalidationAsync }}
+
+    # Top-level nginx keepalive timeout (seconds)
+    keepalive_timeout: {{ .Values.keepaliveTimeout }}
 
     # Proxy configuration
     proxy:
       buffer_size: {{ .Values.proxy.bufferSize }}
       buffers_count: {{ .Values.proxy.buffersCount }}
       buffers_size: {{ .Values.proxy.buffersSize }}
+      busy_buffers_size: {{ .Values.proxy.busyBuffersSize }}
       connect_timeout: {{ .Values.proxy.connectTimeout }}
       send_timeout: {{ .Values.proxy.sendTimeout }}
       read_timeout: {{ .Values.proxy.readTimeout }}
+      {{- if .Values.proxy.stripRequestHeaders }}
+      strip_request_headers:
+        {{- range .Values.proxy.stripRequestHeaders }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
 
     nginx:
       worker_processes: {{ .Values.nginx.workerProcesses }}
       worker_connections: {{ .Values.nginx.workerConnections }}
+      worker_rlimit_nofile: {{ .Values.nginx.workerRlimitNofile }}
+      keepalive_pool_size: {{ .Values.nginx.keepalivePoolSize }}
+      types_hash_max_size: {{ .Values.nginx.typesHashMaxSize }}
+      client_max_body_size: {{ .Values.nginx.clientMaxBodySize | quote }}
+      accept_mutex: {{ .Values.nginx.acceptMutex }}
+      http2: {{ .Values.nginx.http2 }}
+      resolver_timeout: {{ .Values.nginx.resolverTimeout | quote }}
       {{- if .Values.nginx.accessLogBuffer }}
       access_log_buffer: {{ .Values.nginx.accessLogBuffer }}
       {{- end }}
+      {{- if .Values.nginx.resolver }}
+      resolver: {{ .Values.nginx.resolver | quote }}
+      {{- end }}
+      gzip:
+        enabled: {{ .Values.nginx.gzip.enabled }}
+        min_length: {{ .Values.nginx.gzip.minLength }}
+      open_file_cache:
+        max: {{ .Values.nginx.openFileCache.max }}
+        inactive: {{ .Values.nginx.openFileCache.inactive | quote }}
+      proxy_cache:
+        enabled: {{ .Values.nginx.proxyCache.enabled }}
+        path: {{ .Values.nginx.proxyCache.path }}
+        size: {{ .Values.nginx.proxyCache.size }}
+        inactive: {{ .Values.nginx.proxyCache.inactive }}
+
+    {{- /* Listen ports. The container's HTTP/HTTPS ports are normally driven by
+           service.* + HTTP_PORT/HTTPS_PORT env; these keys let you also toggle a
+           listener off entirely or override the port inside socket.yml. */ -}}
+    {{- if or .Values.ports.http .Values.ports.https .Values.ports.disableHttp .Values.ports.disableHttps }}
+    ports:
+      {{- if .Values.ports.http }}
+      http: {{ .Values.ports.http }}
+      {{- end }}
+      {{- if .Values.ports.https }}
+      https: {{ .Values.ports.https }}
+      {{- end }}
+      {{- if .Values.ports.disableHttp }}
+      disable_http: true
+      {{- end }}
+      {{- if .Values.ports.disableHttps }}
+      disable_https: true
+      {{- end }}
+    {{- end }}
+
+    {{- /* Server TLS paths inside socket.yml. Certs are normally delivered via
+           tls.existingSecret; use these to override the paths or to merge a CA
+           trust bundle (ssl.ca_cert) into the server's trust store. */ -}}
+    {{- if or .Values.ssl.cert .Values.ssl.key .Values.ssl.caCert }}
+    ssl:
+      {{- if .Values.ssl.cert }}
+      cert: {{ .Values.ssl.cert | quote }}
+      {{- end }}
+      {{- if .Values.ssl.key }}
+      key: {{ .Values.ssl.key | quote }}
+      {{- end }}
+      {{- if .Values.ssl.caCert }}
+      ca_cert: {{ .Values.ssl.caCert | quote }}
+      {{- end }}
+    {{- end }}
 
     {{- /* Path routing and DNS override / domain-based registries can be enabled together. */ -}}
     {{- if .Values.pathRouting.enabled }}
     path_routing:
       enabled: true
       domain: {{ .Values.pathRouting.domain }}
+      {{- if .Values.pathRouting.allowedDomain }}
+      allowed_domain:
+        {{- range .Values.pathRouting.allowedDomain }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.pathRouting.mode }}
+      mode: {{ .Values.pathRouting.mode }}
+      {{- end }}
       {{- if .Values.pathRouting.configMode }}
       config_mode: {{ .Values.pathRouting.configMode }}
+      {{- end }}
+      {{- if .Values.pathRouting.upstreamFqdn }}
+      upstream_fqdn: {{ .Values.pathRouting.upstreamFqdn | quote }}
+      {{- end }}
+      {{- if .Values.pathRouting.rewriteScheme }}
+      rewrite_scheme: {{ .Values.pathRouting.rewriteScheme }}
+      {{- end }}
+      {{- if .Values.pathRouting.clientRewriteScheme }}
+      client_rewrite_scheme: {{ .Values.pathRouting.clientRewriteScheme }}
+      {{- end }}
+      {{- if kindIs "bool" .Values.pathRouting.useIncomingDomain }}
+      use_incoming_domain: {{ .Values.pathRouting.useIncomingDomain }}
+      {{- end }}
+      {{- if kindIs "bool" .Values.pathRouting.forwardForDomain }}
+      forward_for_domain: {{ .Values.pathRouting.forwardForDomain }}
+      {{- end }}
+      {{- if kindIs "bool" .Values.pathRouting.overrideLocationRewrite }}
+      override_location_rewrite: {{ .Values.pathRouting.overrideLocationRewrite }}
+      {{- end }}
+      {{- if .Values.pathRouting.overridePortHttp }}
+      override_port_http: {{ .Values.pathRouting.overridePortHttp | quote }}
+      {{- end }}
+      {{- if .Values.pathRouting.overridePortHttps }}
+      override_port_https: {{ .Values.pathRouting.overridePortHttps | quote }}
+      {{- end }}
+      {{- if .Values.pathRouting.routesFile }}
+      routes_file: {{ .Values.pathRouting.routesFile | quote }}
       {{- end }}
       routes:
         {{- range .Values.pathRouting.routes }}
         - path: {{ .path }}
+          {{- if .upstream }}
           upstream: {{ .upstream }}
+          {{- end }}
           registry: {{ .registry }}
           {{- if .mode }}
           mode: {{ .mode }}
           {{- end }}
+          {{- if .upstreamType }}
+          upstream_type: {{ .upstreamType }}
+          {{- end }}
+          {{- if .upstreamHost }}
+          upstream_host: {{ .upstreamHost | quote }}
+          {{- end }}
           {{- if .upstreamToken }}
           upstream_token: {{ .upstreamToken }}
           {{- end }}
+          {{- if .baseUrl }}
+          base_url: {{ .baseUrl | quote }}
+          {{- end }}
+          {{- if .artifactoryRepo }}
+          artifactory_repo: {{ .artifactoryRepo }}
+          {{- end }}
+          {{- if .cooldownName }}
+          cooldown_name: {{ .cooldownName }}
+          {{- end }}
+          {{- if .cooldownEcosystem }}
+          cooldown_ecosystem: {{ .cooldownEcosystem }}
+          {{- end }}
+          {{- if .repoKey }}
+          repo_key: {{ .repoKey }}
+          {{- end }}
         {{- end }}
+      {{- if .Values.pathRouting.privateRegistry.enabled }}
+      private_registry:
+        {{- if .Values.pathRouting.privateRegistry.type }}
+        type: {{ .Values.pathRouting.privateRegistry.type }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.apiUrl }}
+        api_url: {{ .Values.pathRouting.privateRegistry.apiUrl | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.apiKey }}
+        api_key: {{ .Values.pathRouting.privateRegistry.apiKey | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.username }}
+        username: {{ .Values.pathRouting.privateRegistry.username | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.password }}
+        password: {{ .Values.pathRouting.privateRegistry.password | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.interval }}
+        interval: {{ .Values.pathRouting.privateRegistry.interval | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.includePattern }}
+        include_pattern: {{ .Values.pathRouting.privateRegistry.includePattern | quote }}
+        {{- end }}
+        {{- if .Values.pathRouting.privateRegistry.excludePattern }}
+        exclude_pattern: {{ .Values.pathRouting.privateRegistry.excludePattern | quote }}
+        {{- end }}
+        ignore_ssl_errors: {{ .Values.pathRouting.privateRegistry.ignoreSslErrors }}
+        supported_ecosystems_only: {{ .Values.pathRouting.privateRegistry.supportedEcosystemsOnly }}
+        include_virtual: {{ .Values.pathRouting.privateRegistry.includeVirtual }}
+      {{- end }}
     {{- end }}
     {{- if .Values.dnsRouting.enabled }}
     registries:
@@ -139,6 +350,9 @@ data:
           {{- range .Values.registries.npm.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.npm.upstream }}
+        upstream: {{ .Values.registries.npm.upstream }}
+        {{- end }}
         {{- if .Values.registries.npm.upstreamToken }}
         upstream_token: {{ .Values.registries.npm.upstreamToken }}
         {{- end }}
@@ -149,6 +363,9 @@ data:
           {{- range .Values.registries.pypi.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.pypi.upstream }}
+        upstream: {{ .Values.registries.pypi.upstream }}
+        {{- end }}
         {{- if .Values.registries.pypi.upstreamToken }}
         upstream_token: {{ .Values.registries.pypi.upstreamToken }}
         {{- end }}
@@ -159,6 +376,9 @@ data:
           {{- range .Values.registries.maven.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.maven.upstream }}
+        upstream: {{ .Values.registries.maven.upstream }}
+        {{- end }}
         {{- if .Values.registries.maven.upstreamToken }}
         upstream_token: {{ .Values.registries.maven.upstreamToken }}
         {{- end }}
@@ -169,6 +389,9 @@ data:
           {{- range .Values.registries.rubygems.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.rubygems.upstream }}
+        upstream: {{ .Values.registries.rubygems.upstream }}
+        {{- end }}
         {{- if .Values.registries.rubygems.upstreamToken }}
         upstream_token: {{ .Values.registries.rubygems.upstreamToken }}
         {{- end }}
@@ -179,6 +402,9 @@ data:
           {{- range .Values.registries.cargo.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.cargo.upstream }}
+        upstream: {{ .Values.registries.cargo.upstream }}
+        {{- end }}
         {{- if .Values.registries.cargo.upstreamToken }}
         upstream_token: {{ .Values.registries.cargo.upstreamToken }}
         {{- end }}
@@ -189,6 +415,9 @@ data:
           {{- range .Values.registries.openvsx.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.openvsx.upstream }}
+        upstream: {{ .Values.registries.openvsx.upstream }}
+        {{- end }}
         {{- if .Values.registries.openvsx.upstreamToken }}
         upstream_token: {{ .Values.registries.openvsx.upstreamToken }}
         {{- end }}
@@ -199,6 +428,9 @@ data:
           {{- range .Values.registries.nuget.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.nuget.upstream }}
+        upstream: {{ .Values.registries.nuget.upstream }}
+        {{- end }}
         {{- if .Values.registries.nuget.upstreamToken }}
         upstream_token: {{ .Values.registries.nuget.upstreamToken }}
         {{- end }}
@@ -209,6 +441,9 @@ data:
           {{- range .Values.registries.go.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.go.upstream }}
+        upstream: {{ .Values.registries.go.upstream }}
+        {{- end }}
         {{- if .Values.registries.go.upstreamToken }}
         upstream_token: {{ .Values.registries.go.upstreamToken }}
         {{- end }}
@@ -219,6 +454,9 @@ data:
           {{- range .Values.registries.conda.domains }}
           - {{ . }}
           {{- end }}
+        {{- if .Values.registries.conda.upstream }}
+        upstream: {{ .Values.registries.conda.upstream }}
+        {{- end }}
         {{- if .Values.registries.conda.upstreamToken }}
         upstream_token: {{ .Values.registries.conda.upstreamToken }}
         {{- end }}
@@ -234,6 +472,83 @@ data:
       max_versions: {{ .Values.metadataFiltering.maxVersions }}
       cache_ttl: {{ .Values.metadataFiltering.cacheTtl }}
       batch_size: {{ .Values.metadataFiltering.batchSize }}
+      max_body_size: {{ .Values.metadataFiltering.maxBodySize | quote }}
+      prefetch_enabled: {{ .Values.metadataFiltering.prefetchEnabled }}
+      prefetch_ttl: {{ .Values.metadataFiltering.prefetchTtl }}
+      prefetch_max_concurrent: {{ .Values.metadataFiltering.prefetchMaxConcurrent }}
+      prefetch_batch_concurrency: {{ .Values.metadataFiltering.prefetchBatchConcurrency }}
+      metadata_concurrent_batch: {{ .Values.metadataFiltering.metadataConcurrentBatch }}
+      max_concurrent: {{ .Values.metadataFiltering.maxConcurrent }}
+      package_filter_timeout: {{ .Values.metadataFiltering.packageFilterTimeout }}
+      package_filter_retry: {{ .Values.metadataFiltering.packageFilterRetry }}
+      {{- if .Values.metadataFiltering.excludedEcosystems }}
+      excluded_ecosystems:
+        {{- range .Values.metadataFiltering.excludedEcosystems }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.metadataFiltering.condaPrefetchArchs }}
+      conda_prefetch_archs:
+        {{- range .Values.metadataFiltering.condaPrefetchArchs }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
+    {{- if .Values.externalRegistryCooldown.enabled }}
+    external_registry_cooldown:
+      enabled: true
+      cooldown_period: {{ .Values.externalRegistryCooldown.cooldownPeriod | quote }}
+      check_interval: {{ .Values.externalRegistryCooldown.checkInterval | quote }}
+      redis_key_prefix: {{ .Values.externalRegistryCooldown.redisKeyPrefix | quote }}
+      cache_ttl: {{ .Values.externalRegistryCooldown.cacheTtl }}
+      {{- if .Values.externalRegistryCooldown.mode }}
+      mode: {{ .Values.externalRegistryCooldown.mode }}
+      {{- end }}
+      {{- if .Values.externalRegistryCooldown.fallback }}
+      fallback: {{ .Values.externalRegistryCooldown.fallback }}
+      {{- end }}
+      {{- if .Values.externalRegistryCooldown.registries }}
+      registries:
+        {{- range .Values.externalRegistryCooldown.registries }}
+        - name: {{ .name }}
+          url: {{ .url | quote }}
+          ecosystem: {{ .ecosystem }}
+          {{- if .authType }}
+          auth_type: {{ .authType }}
+          {{- end }}
+          {{- if .authCredential }}
+          auth_credential: {{ .authCredential }}
+          {{- end }}
+          {{- if .rateLimitHeader }}
+          rate_limit_header: {{ .rateLimitHeader | quote }}
+          {{- end }}
+          {{- if kindIs "bool" .ignoreSslErrors }}
+          ignore_ssl_errors: {{ .ignoreSslErrors }}
+          {{- end }}
+          {{- if .timeout }}
+          timeout: {{ .timeout }}
+          {{- end }}
+          {{- if .cooldownPeriod }}
+          cooldown_period: {{ .cooldownPeriod | quote }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.externalRegistryCooldown.privateRegistry.enabled }}
+      private_registry:
+        enabled: true
+        auth_type: {{ .Values.externalRegistryCooldown.privateRegistry.authType }}
+        {{- if .Values.externalRegistryCooldown.privateRegistry.authCredential }}
+        auth_credential: {{ .Values.externalRegistryCooldown.privateRegistry.authCredential }}
+        {{- end }}
+        source: {{ .Values.externalRegistryCooldown.privateRegistry.source }}
+        include_unsupported_only: {{ .Values.externalRegistryCooldown.privateRegistry.includeUnsupportedOnly }}
+        include_pattern: {{ .Values.externalRegistryCooldown.privateRegistry.includePattern | quote }}
+        exclude_pattern: {{ .Values.externalRegistryCooldown.privateRegistry.excludePattern | quote }}
+        {{- if .Values.externalRegistryCooldown.privateRegistry.cooldownPeriod }}
+        cooldown_period: {{ .Values.externalRegistryCooldown.privateRegistry.cooldownPeriod | quote }}
+        {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.redis.enabled }}
@@ -248,6 +563,9 @@ data:
       {{- if .Values.redis.ssl }}
       ssl: true
       ssl_verify: {{ .Values.redis.sslVerify }}
+      {{- if .Values.redis.sslServerName }}
+      ssl_server_name: {{ .Values.redis.sslServerName | quote }}
+      {{- end }}
       {{- if .Values.redis.sslCaCertExistingSecret }}
       ssl_ca_cert: /etc/nginx/redis-tls/ca/ca.crt
       {{- else if .Values.redis.sslCaCert }}
@@ -272,6 +590,12 @@ data:
       hec_url: {{ .Values.splunk.hecUrl }}
       index: {{ .Values.splunk.index }}
       source: {{ .Values.splunk.source }}
+      {{- if .Values.splunk.sourcetype }}
+      sourcetype: {{ .Values.splunk.sourcetype | quote }}
+      {{- end }}
+      ssl_verify: {{ .Values.splunk.sslVerify }}
+      timeout: {{ .Values.splunk.timeout }}
+      batch_size: {{ .Values.splunk.batchSize }}
     {{- end }}
 
     {{- if .Values.webhook.enabled }}
@@ -313,4 +637,13 @@ data:
       max_tunnel_lifetime_seconds: {{ .Values.forwardProxy.maxTunnelLifetimeSeconds }}
       max_connections_per_source: {{ .Values.forwardProxy.maxConnectionsPerSource }}
       proxy_protocol_port: {{ .Values.forwardProxy.proxyProtocolPort }}
+    {{- end }}
+
+    {{- /* Raw-config passthrough: arbitrary keys merged verbatim into socket.yml.
+           Escape hatch for keys not exposed above or new upstream config
+           sections. Emitted as top-level YAML, so do NOT repeat a section the
+           chart already renders (e.g. socket:, nginx:) — that produces duplicate
+           keys. Use it for whole sections the chart doesn't own. */ -}}
+    {{- with .Values.extraConfig }}
+    {{ toYaml . | nindent 4 }}
     {{- end }}

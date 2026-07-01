@@ -111,9 +111,14 @@ registries:
 | `registries.<name>.domains` | Custom domains for registry | `[]` |
 | **Integrations** | | |
 | `metadataFiltering.enabled` | Filter blocked packages from metadata | `false` |
+| `externalRegistryCooldown.enabled` | Publish-date enforcement for ecosystems Socket doesn't natively support | `false` |
 | `redis.enabled` | Enable Redis caching for API lookups | `false` |
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
+| **Advanced Config** | | |
+| `ports.disableHttp` / `ports.disableHttps` | Disable a listener entirely | `false` |
+| `ssl.caCert` | CA trust bundle (file path) merged into the server trust store | `""` |
+| `extraConfig` | Raw `socket.yml` passthrough (arbitrary/new top-level sections) | `{}` |
 | **Infrastructure** | | |
 | `tls.generateSelfSigned` | Generate self-signed certs | `true` |
 | `tls.existingSecret` | Use existing TLS secret | `""` |
@@ -145,6 +150,37 @@ registries:
 | `initContainers.certGenerator.securityContext` | generate-certs init container security context | PSS restricted |
 
 See [values.yaml](values.yaml) for all options.
+
+### Full Configuration Coverage
+
+The chart renders the complete `socket.yml` schema — every key in the firewall's
+[`socket.defaults.yml`](https://github.com/SocketDev/socket-nginx-firewall/blob/main/socket.defaults.yml)
+reference is expressible through values. This includes the `socket`, `cache`,
+`proxy`, `nginx`, `ports`, `ssl`, `path_routing` (incl. per-route Artifactory/Nexus
+keys and `private_registry` auto-discovery), `registries`, `metadata_filtering`,
+`external_registry_cooldown`, `redis`, `splunk`, `webhook`, `client_ip`, `lua`, and
+`forward_proxy` sections. Keys default to the firewall's coded defaults, so anything
+you leave unset behaves exactly as before.
+
+Deployment-specific string keys (paths, hostnames, tokens, CA certs) are only
+emitted into `socket.yml` when you set them; leaving them empty keeps the firewall
+default.
+
+#### Raw-config passthrough (`extraConfig`)
+
+For any key the chart doesn't expose — or a brand-new upstream config section — use
+`extraConfig`. Its contents are merged verbatim into `socket.yml` as top-level YAML:
+
+```yaml
+extraConfig:
+  some_new_section:
+    some_key: some_value
+```
+
+> **Note:** `extraConfig` is appended as top-level YAML. Don't repeat a section the
+> chart already renders (e.g. `socket:`, `nginx:`), as that produces duplicate keys.
+> Use the dedicated values for those sections and reserve `extraConfig` for sections
+> the chart doesn't own.
 
 ### Example Configurations
 
