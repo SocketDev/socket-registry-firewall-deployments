@@ -77,6 +77,57 @@ socket:
   # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx
   recentlyPublishedEnabledEcosystems: []
 
+  # Socket API endpoint. Empty uses the firewall default (https://api.socket.dev).
+  apiUrl: ""
+  # Verify outbound TLS to the Socket API.
+  apiSslVerify: true
+  # Override CA (file path) for Socket API calls. Empty uses ssl.caCert bundle / system trust.
+  apiSslCaCert: ""
+  # Verify outbound TLS to upstream registries. Leave null to inherit apiSslVerify.
+  upstreamSslVerify: null
+  # Override CA (file path) for upstream registry calls. Empty uses ssl.caCert bundle / system trust.
+  upstreamSslCaCert: ""
+  # Outbound HTTP proxy applied to Socket API + registry traffic.
+  outboundProxy: ""
+  # Comma-separated host list bypassing outboundProxy.
+  noProxy: ""
+  # Named deployment/config in the Socket dashboard (used with useRemoteConfig / cooldown api mode).
+  deployment: ""
+  # Client auth gate — HTTP basic auth. Rendered into the ConfigMap (not a Secret).
+  basicAuthUsername: ""
+  basicAuthPassword: ""
+  # Token guarding the authenticated health endpoint. Empty leaves it unauthenticated
+  # (falls back to the SOCKET_HEALTH_API_TOKEN env var).
+  healthApiToken: ""
+  # Restrict debug logging to requests whose User-Agent matches this glob (e.g. "*pip*").
+  debugUserAgentFilter: ""
+  # Socket API read timeout (seconds). Leave null to inherit proxy.readTimeout.
+  apiReadTimeout: null
+  # Per-action log levels for SOCKET_DECISION output (error | warn | notice | info | debug).
+  # Empty uses the firewall defaults (block=error, warn=warn, monitor=notice, ignore=debug).
+  blockLogLevel: ""
+  warnLogLevel: ""
+  monitorLogLevel: ""
+  ignoreLogLevel: ""
+  # Per-ecosystem overrides. Each entry recognizes allow_unknown and use_private_created_at.
+  # ecosystemParams:
+  #   conda:
+  #     use_private_created_at: true
+  #     allow_unknown: true
+  ecosystemParams: {}
+
+# Cache freshness / revalidation (Socket API response cache). See socket.cacheTtl for ttl.
+cache:
+  # Lease held while revalidating a stale entry (seconds; 0 disables the lock).
+  revalidationLockLeaseSeconds: 0
+  # Jitter added to revalidation scheduling to avoid thundering herds (seconds).
+  revalidationJitterSeconds: 120
+  # Revalidate stale entries asynchronously (serve stale, refresh in background).
+  revalidationAsync: true
+
+# Top-level nginx keepalive timeout (seconds).
+keepaliveTimeout: 65
+
 # Upstream auth tokens. Two modes:
 # If set, chart provisions a Secret <release>-upstream-tokens with these keys;
 # routes/registries without `upstreamTokenSecret` default to it.
@@ -90,8 +141,30 @@ upstreamTokens:
 pathRouting:
   enabled: false
   domain: ""
+  # Additional hostnames this server answers to beyond `domain` (exact names,
+  # nginx wildcards like *.cluster.example.com, or a regex ~^.+$ catch-all).
+  allowedDomain: []
+  # Routing mode: local | artifactory | nexus | downstream. Empty = local (firewall default).
+  mode: ""
   # config_mode: upstream or middle (omit for downstream, which is default)
   configMode: ""
+  # FQDN of the upstream this firewall proxies to (artifactory/nexus/middle modes).
+  upstreamFqdn: ""
+  # Scheme used when rewriting package URLs. Empty = https (firewall default).
+  rewriteScheme: ""
+  # Scheme advertised to clients in rewritten URLs. Empty falls back to rewriteScheme.
+  clientRewriteScheme: ""
+  # Rewrite package URLs with the incoming Host instead of `domain`. Null = firewall default (false).
+  useIncomingDomain: null
+  # Emit X-Forwarded-For style domain forwarding. Null = firewall default (true).
+  forwardForDomain: null
+  # Override nginx location-block URL rewriting. Null = firewall default (false).
+  overrideLocationRewrite: null
+  # Advertise non-standard ports in rewritten URLs (e.g. "8080" / "8443").
+  overridePortHttp: ""
+  overridePortHttps: ""
+  # Optional CSV file of routes, merged with the `routes` list below.
+  routesFile: ""
   # upstreamToken / upstreamTokenSecret on a route enable upstream auth.
   # See: https://docs.socket.dev/docs/registry-mode-configuration-reference
   routes: []
@@ -100,6 +173,29 @@ pathRouting:
   #   registry: npm
   #   upstreamToken: NPM_AUTH_TOKEN
   #   upstreamTokenSecret: socket-upstream-tokens
+  #   # Advanced per-route keys (all optional):
+  #   upstreamType: ""          # "" or "artifactory"
+  #   upstreamHost: ""          # explicit upstream Host header
+  #   mode: rewrite             # "rewrite" or "proxy"
+  #   baseUrl: ""               # artifactory mode only
+  #   artifactoryRepo: ""       # artifactory mode only
+  #   cooldownName: ""          # ties route to an externalRegistryCooldown.registries[].name
+  #   cooldownEcosystem: ""     # gradle, pypi, conda, ... (resolved from cooldownName if omitted)
+  #   repoKey: ""               # private-registry repo key (defaults to cooldownName)
+  # Auto-discovery of upstream repos in a Nexus/Artifactory instance.
+  privateRegistry:
+    enabled: false
+    type: ""                    # 'nexus' or 'artifactory'
+    apiUrl: ""
+    apiKey: ""                  # also overridable via PRIVATE_REGISTRY_KEY env var
+    username: ""
+    password: ""
+    interval: "5m"
+    includePattern: ".*"
+    excludePattern: "^$"
+    ignoreSslErrors: false
+    supportedEcosystemsOnly: true
+    includeVirtual: false       # Nexus only
   # - path: /pypi
   #   upstream: https://pypi.org
   #   registry: pypi
@@ -128,11 +224,13 @@ pathRouting:
 # Domain-based routing (alternative — each registry gets its own subdomain)
 # Only used when pathRouting.enabled is false.
 # upstreamToken / upstreamTokenSecret on a registry enable upstream auth.
+# upstream on a registry overrides the default public upstream (e.g. an internal mirror).
 registries:
   npm:
     enabled: false
     domains:
       - npm.company.local
+    # upstream: https://registry.npmjs.org
     # upstreamToken: NPM_AUTH_TOKEN
     # upstreamTokenSecret: socket-upstream-tokens
   pypi:
@@ -188,17 +286,66 @@ proxy:
   bufferSize: "16k"
   buffersCount: 8
   buffersSize: "16k"
+  busyBuffersSize: "32k"
   connectTimeout: 60
   sendTimeout: 60
   readTimeout: 60
+  # Request headers to strip before forwarding upstream (case-insensitive).
+  # Empty list = strip nothing. e.g. ["Authorization", "Cookie"]
+  stripRequestHeaders: []
 
 # Nginx performance tuning
 nginx:
   workerProcesses: 4
   workerConnections: 8192
+  workerRlimitNofile: 2048
+  keepalivePoolSize: 64
+  typesHashMaxSize: 2048
+  clientMaxBodySize: "100M"
+  # Serialize connection acceptance across workers ("on" / "off").
+  acceptMutex: "off"
+  # Enable HTTP/2 on the TLS (HTTPS) listener.
+  http2: true
+  # DNS resolver for upstream name resolution (e.g. kube-dns "10.96.0.10").
+  # Empty leaves the firewall to auto-detect (127.0.0.11 for Docker).
+  resolver: ""
+  resolverTimeout: "5s"
   # Access log buffer setting (default: not set, nginx uses its default)
   # Set to "off" to flush access log lines immediately to stdout
   accessLogBuffer: "off"
+  gzip:
+    enabled: "on"
+    minLength: 1024
+  openFileCache:
+    max: 1000
+    inactive: "60s"
+  proxyCache:
+    enabled: "on"
+    path: /tmp/nginx_cache
+    size: 100m
+    inactive: 60m
+
+# Listen ports. The container HTTP/HTTPS ports are normally set via service.* and
+# the HTTP_PORT/HTTPS_PORT env vars; these keys additionally let you disable a
+# listener entirely or override the port from within socket.yml.
+ports:
+  # Override the HTTP listen port inside socket.yml. Empty/null = use service defaults.
+  http: null
+  # Override the HTTPS listen port inside socket.yml. Empty/null = use service defaults.
+  https: null
+  # Disable the HTTP listener entirely.
+  disableHttp: false
+  # Disable the HTTPS listener entirely (incompatible with forwardProxy.enabled).
+  disableHttps: false
+
+# Server TLS paths inside socket.yml. Certificates are normally delivered via
+# tls.existingSecret (mounted for you); set these only to override the on-disk
+# paths or to merge a CA trust bundle (caCert) into the server's trust store.
+ssl:
+  cert: ""
+  key: ""
+  # CA bundle (file path) merged into the trust store — e.g. for corporate CAs.
+  caCert: ""
 
 # Lua shared-memory zone sizes (raise if cache/stats dictionaries fill up)
 lua:
@@ -250,6 +397,26 @@ metadataFiltering:
   maxVersions: 100
   cacheTtl: 3600
   batchSize: 4000
+  # Max response body size subject to filtering.
+  maxBodySize: "500m"
+  # Ecosystems to skip filtering for (empty = filter all supported ecosystems).
+  excludedEcosystems: []
+  # Prefetch package metadata to warm the filter cache.
+  prefetchEnabled: true
+  prefetchTtl: 600
+  prefetchMaxConcurrent: 2
+  prefetchBatchConcurrency: 4
+  # Max concurrent PURL batch API calls per inline metadata request.
+  metadataConcurrentBatch: 1
+  # Conda arches to prefetch (empty = firewall defaults: linux-64, linux-aarch64,
+  # osx-64, osx-arm64, win-64, noarch).
+  condaPrefetchArchs: []
+  # Per-worker concurrent metadata filter operations.
+  maxConcurrent: 3
+  # Total time budget per metadata filter operation (seconds).
+  packageFilterTimeout: 60
+  # Retries for a failed PURL batch API call within the timeout budget (0 = none).
+  packageFilterRetry: 0
 
 # Redis caching for Socket API lookups
 redis:
@@ -266,6 +433,8 @@ redis:
   ttl: 86400
   ssl: false
   sslVerify: true
+  # TLS SNI server name presented to the Redis server (managed services may require this).
+  sslServerName: ""
   # File path inside the container for the Redis CA certificate.
   # Use sslCaCertExistingSecret below to have the chart mount a secret
   # for you. Set sslCaCert directly only if you are delivering the file
@@ -300,6 +469,14 @@ splunk:
   existingSecretKey: "SPLUNK_HEC_TOKEN"
   index: "sfw-hec"
   source: "sfw-event"
+  # Splunk sourcetype. Empty uses the firewall default (socket:firewall:event).
+  sourcetype: ""
+  # Verify TLS to the HEC endpoint.
+  sslVerify: false
+  # HEC request timeout (milliseconds).
+  timeout: 5000
+  # Events per HEC delivery (1 = send each event immediately).
+  batchSize: 1
 
 # Webhook event delivery (fires on package decisions)
 webhook:
@@ -319,6 +496,54 @@ webhook:
   batchSize: 524288
   # Batch flush interval in seconds
   batchPeriod: 5
+
+# External registry cooldown — publish-date enforcement for ecosystems Socket does
+# not natively support (e.g. Gradle plugins, private registries). Blocks packages
+# published more recently than cooldownPeriod. Requires redis for shared state in
+# multi-replica deployments.
+externalRegistryCooldown:
+  enabled: false
+  # Block packages published more recently than this window.
+  cooldownPeriod: "7d"
+  checkInterval: "60s"
+  redisKeyPrefix: "cooldown:"
+  cacheTtl: 86400
+  # mode: empty auto-detects ('api' when socket.deployment is set, else 'local').
+  mode: ""
+  # fallback: '' (none), 'external', 'artifactory', or 'nexus'.
+  fallback: ""
+  # External registries to monitor. Each entry: name, url, ecosystem (required);
+  # authType/authCredential/rateLimitHeader/ignoreSslErrors/timeout/cooldownPeriod optional.
+  registries: []
+  # - name: gradle-plugins
+  #   url: https://plugins.gradle.org
+  #   ecosystem: gradle
+  #   authType: none            # 'none' | 'basic' | 'bearer'
+  #   authCredential: ""        # env var name holding the credential
+  #   rateLimitHeader: ""
+  #   ignoreSslErrors: false
+  #   timeout: 30
+  #   cooldownPeriod: "7d"      # optional per-registry override
+  # Cooldown queries against the configured private registry.
+  privateRegistry:
+    enabled: false
+    authType: bearer_token      # 'bearer_token' | 'basic'
+    authCredential: ""          # env var name
+    source: auto                # 'auto' | 'artifactory' | 'nexus'
+    # Only enforce cooldown on ecosystems Socket doesn't natively support.
+    includeUnsupportedOnly: true
+    includePattern: ".*"
+    excludePattern: "^$"
+    # cooldownPeriod: "7d"      # optional override for discovered repos
+
+# Raw-config passthrough (advanced). Arbitrary keys merged verbatim into socket.yml
+# as top-level YAML. Escape hatch for config keys the chart doesn't expose or new
+# upstream sections. Do NOT repeat a section the chart already renders (socket:,
+# nginx:, proxy:, cache:, etc.) — that yields duplicate YAML keys. Use it for whole
+# sections the chart doesn't own.
+extraConfig: {}
+  # some_new_section:
+  #   some_key: some_value
 
 # Service configuration
 service:
