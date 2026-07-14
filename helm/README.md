@@ -145,6 +145,7 @@ registries:
 | `forwardProxy.service.loadBalancerSourceRanges` | CIDRs allowed to reach the CONNECT listener (your CASB egress) | `[]` |
 | **Metrics & Monitoring** | _Prometheus metrics — see [section below](#metrics--monitoring)_ | |
 | `metrics.enabled` | Expose the `/metrics` port on the container and Service | `true` |
+| `metrics.minImageVersion` | Minimum firewall image version (semver) that serves `/metrics`; older tags are auto-suppressed, non-semver tags (`latest`, digests) are assumed new enough | `"1.1.343"` |
 | `metrics.port` | Port the firewall's metrics listener binds to (fixed at 9145 in the image) | `9145` |
 | `metrics.podAnnotations` | Add `prometheus.io/{scrape,port,path}` pod annotations for annotation-based discovery | `false` |
 | `metrics.serviceMonitor.enabled` | Create a Prometheus Operator ServiceMonitor (requires the CRDs) | `false` |
@@ -641,6 +642,16 @@ The firewall exposes Prometheus metrics in text exposition format on a dedicated
 plain-HTTP listener on port `9145` at `/metrics`. The listener is always on in the
 image and the chart exposes it by default (`metrics.enabled: true`) as a `metrics`
 port on the ClusterIP Service, so it is reachable in-cluster without extra config.
+
+**Image-version gate:** the `/metrics` endpoint only exists in firewall image
+`1.1.343` or later. The chart auto-suppresses the metrics port, pod annotations,
+and ServiceMonitor when the resolved image tag is an older semver than
+`metrics.minImageVersion` (default `1.1.343`, the first image that serves
+`/metrics`), so pinning an older image won't produce a dangling scrape target.
+Tags that aren't semver (`latest`, a digest, or a custom string) can't be
+compared and are treated as new enough (fail-open), so those installs are never
+broken. Set `metrics.enabled: false` to disable metrics exposure regardless of
+the image tag.
 
 **Scrape with Prometheus Operator (ServiceMonitor):**
 

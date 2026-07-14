@@ -15,7 +15,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- if and .Values.metrics.enabled .Values.metrics.podAnnotations }}
+        {{- if and (eq (include "socket-firewall.metricsExposed" .) "true") .Values.metrics.podAnnotations }}
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.metrics.port | quote }}
         prometheus.io/path: "/metrics"
@@ -198,7 +198,7 @@ spec:
               containerPort: {{ .Values.forwardProxy.port }}
               protocol: TCP
             {{- end }}
-            {{- if .Values.metrics.enabled }}
+            {{- if eq (include "socket-firewall.metricsExposed" .) "true" }}
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
               protocol: TCP

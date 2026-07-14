@@ -553,6 +553,11 @@ extraConfig: {}
 metrics:
   # Expose the metrics port on the container and Service so it can be scraped.
   enabled: true
+  # Minimum firewall image version that serves the /metrics endpoint. The
+  # metrics port/annotations/ServiceMonitor are only rendered when the resolved
+  # image tag is >= this (semver). Non-semver tags (e.g. "latest" or a digest)
+  # are assumed new enough and are NOT gated out.
+  minImageVersion: "1.1.343"
   # Port the firewall's /metrics listener binds to. Must match the firewall
   # image's metrics listener (currently fixed at 9145); changing this value
   # alone does not change what the container listens on.

@@ -25,7 +25,7 @@ spec:
       protocol: TCP
       name: forward-proxy
     {{- end }}
-    {{- if .Values.metrics.enabled }}
+    {{- if eq (include "socket-firewall.metricsExposed" .) "true" }}
     - port: {{ .Values.metrics.port }}
       targetPort: metrics
       name: metrics

@@ -124,7 +124,7 @@ Expose it via a Layer-4 (TCP passthrough) load balancer; it cannot go through an
 Test the health endpoint:
 
   curl -sk https://<firewall-ip>/health
-{{- if .Values.metrics.enabled }}
+{{- if eq (include "socket-firewall.metricsExposed" .) "true" }}
 
 ## Metrics
 
