@@ -25,5 +25,11 @@ spec:
       protocol: TCP
       name: forward-proxy
     {{- end }}
+    {{- if .Values.metrics.enabled }}
+    - port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      name: metrics
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "socket-firewall.selectorLabels" . | nindent 4 }}

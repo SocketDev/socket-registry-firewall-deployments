@@ -545,6 +545,35 @@ extraConfig: {}
   # some_new_section:
   #   some_key: some_value
 
+# Prometheus metrics
+# The firewall serves metrics in Prometheus text format on a dedicated
+# plain-HTTP listener. The endpoint has no built-in authentication and is
+# reachable only in-cluster via the ClusterIP Service; restrict further with
+# a NetworkPolicy if required.
+metrics:
+  # Expose the metrics port on the container and Service so it can be scraped.
+  enabled: true
+  # Port the firewall's /metrics listener binds to. Must match the firewall
+  # image's metrics listener (currently fixed at 9145); changing this value
+  # alone does not change what the container listens on.
+  port: 9145
+  # Add prometheus.io/{scrape,port,path} annotations to the pod for
+  # annotation-based scrape discovery. Use this OR serviceMonitor, not both.
+  podAnnotations: false
+  serviceMonitor:
+    # Create a Prometheus Operator ServiceMonitor. Requires the
+    # monitoring.coreos.com CRDs to be installed in the cluster.
+    enabled: false
+    # Namespace for the ServiceMonitor; defaults to the release namespace.
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    # Extra labels (e.g. to match your Prometheus serviceMonitorSelector).
+    labels: {}
+    honorLabels: false
+    relabelings: []
+    metricRelabelings: []
+
 # Service configuration
 service:
   type: ClusterIP
