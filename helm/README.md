@@ -143,6 +143,16 @@ registries:
 | `forwardProxy.service.type` | `LoadBalancer` (NLB) or `NodePort` — **not** behind an ALB/L7 ingress | `LoadBalancer` |
 | `forwardProxy.service.annotations` | Annotations for the L4 Service (e.g. AWS NLB) | `{}` |
 | `forwardProxy.service.loadBalancerSourceRanges` | CIDRs allowed to reach the CONNECT listener (your CASB egress) | `[]` |
+| **Metrics & Monitoring** | _Prometheus metrics — see [section below](#metrics--monitoring)_ | |
+| `metrics.enabled` | Expose the `/metrics` port on the container and Service | `true` |
+| `metrics.minImageVersion` | Minimum firewall image version (semver) that serves `/metrics`; older tags are auto-suppressed, non-semver tags (`latest`, digests) are assumed new enough | `"1.1.343"` |
+| `metrics.port` | Port the firewall's metrics listener binds to (fixed at 9145 in the image) | `9145` |
+| `metrics.podAnnotations` | Add `prometheus.io/{scrape,port,path}` pod annotations for annotation-based discovery | `false` |
+| `metrics.serviceMonitor.enabled` | Create a Prometheus Operator ServiceMonitor (requires the CRDs) | `false` |
+| `metrics.serviceMonitor.namespace` | Namespace for the ServiceMonitor (defaults to the release namespace) | `""` |
+| `metrics.serviceMonitor.interval` | Scrape interval | `30s` |
+| `metrics.serviceMonitor.scrapeTimeout` | Scrape timeout | `10s` |
+| `metrics.serviceMonitor.labels` | Extra labels (e.g. to match your Prometheus `serviceMonitorSelector`) | `{}` |
 | **Security** | | |
 | `securityContext` | Container security context | PSS restricted (see values.yaml) |
 | `podSecurityContext` | Pod-level security context | `{}` |
@@ -625,6 +635,55 @@ redis:
 ```
 
 The `sslCaCert`, `sslClientCert`, and `sslClientKey` fields remain available as raw file paths if you are delivering the cert files via your own volume or init container.
+
+## Metrics & Monitoring
+
+The firewall exposes Prometheus metrics in text exposition format on a dedicated
+plain-HTTP listener on port `9145` at `/metrics`. The listener is always on in the
+image and the chart exposes it by default (`metrics.enabled: true`) as a `metrics`
+port on the ClusterIP Service, so it is reachable in-cluster without extra config.
+
+**Image-version gate:** the `/metrics` endpoint only exists in firewall image
+`1.1.343` or later. The chart auto-suppresses the metrics port, pod annotations,
+and ServiceMonitor when the resolved image tag is an older semver than
+`metrics.minImageVersion` (default `1.1.343`, the first image that serves
+`/metrics`), so pinning an older image won't produce a dangling scrape target.
+Tags that aren't semver (`latest`, a digest, or a custom string) can't be
+compared and are treated as new enough (fail-open), so those installs are never
+broken. Set `metrics.enabled: false` to disable metrics exposure regardless of
+the image tag.
+
+**Scrape with Prometheus Operator (ServiceMonitor):**
+
+```yaml
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    # labels: to match your Prometheus serviceMonitorSelector
+    labels: {}
+```
+
+This requires the `monitoring.coreos.com` CRDs (Prometheus Operator) to be installed
+in the cluster.
+
+**Annotation-based discovery (alternative):** if you scrape via pod annotations
+instead of the Operator, set `metrics.podAnnotations: true` to add
+`prometheus.io/scrape`, `prometheus.io/port`, and `prometheus.io/path` to the pod.
+Use this *or* the ServiceMonitor, not both.
+
+> **Security:** the `/metrics` endpoint has no built-in authentication — access
+> control is deferred to the network layer. It is only reachable in-cluster via the
+> ClusterIP Service; restrict access further with a NetworkPolicy if required, and
+> do not expose port `9145` through an Ingress or LoadBalancer.
+
+To turn metrics off entirely (drops the container/Service port and any ServiceMonitor):
+
+```yaml
+metrics:
+  enabled: false
+```
 
 ## Deployment Recommendations
 

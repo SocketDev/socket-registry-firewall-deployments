@@ -124,5 +124,17 @@ Expose it via a Layer-4 (TCP passthrough) load balancer; it cannot go through an
 Test the health endpoint:
 
   curl -sk https://<firewall-ip>/health
+{{- if eq (include "socket-firewall.metricsExposed" .) "true" }}
+
+## Metrics
+
+Prometheus metrics are exposed on port {{ .Values.metrics.port }} at /metrics (plain HTTP, no auth).
+{{- if .Values.metrics.serviceMonitor.enabled }}
+A ServiceMonitor was created; Prometheus Operator will scrape it automatically.
+{{- else }}
+Set metrics.serviceMonitor.enabled=true (Prometheus Operator) or metrics.podAnnotations=true
+(annotation-based) to scrape it. The endpoint is unauthenticated — restrict access with a NetworkPolicy.
+{{- end }}
+{{- end }}
 
 See deployment recommendations in README.md for production setup.
