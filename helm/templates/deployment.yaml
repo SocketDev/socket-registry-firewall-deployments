@@ -209,6 +209,13 @@ spec:
                 secretKeyRef:
                   name: {{ include "socket-firewall.secretName" . }}
                   key: {{ .Values.socket.existingSecretKey }}
+            {{- if or .Values.socket.bearerToken .Values.socket.bearerTokenExistingSecret }}
+            - name: SOCKET_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "socket-firewall.bearerTokenSecretName" . }}
+                  key: {{ .Values.socket.bearerTokenExistingSecretKey }}
+            {{- end }}
             - name: HTTP_PORT
               value: {{ (.Values.service.containerHttpPort | default .Values.service.httpPort) | quote }}
             - name: HTTPS_PORT

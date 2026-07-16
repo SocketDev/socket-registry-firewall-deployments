@@ -95,6 +95,9 @@ registries:
 | `replicaCount` | Number of replicas (ignored if autoscaling enabled) | `1` |
 | `socket.apiToken` | Socket API token | `""` |
 | `socket.existingSecret` | Use existing secret | `""` |
+| `socket.bearerToken` | Client auth gate token. When set, inbound requests must present `Authorization: Bearer <token>`. Empty disables the gate. | `""` |
+| `socket.bearerTokenExistingSecret` | Existing secret holding the bearer token (instead of `socket.bearerToken`) | `""` |
+| `socket.bearerTokenExistingSecretKey` | Key within the bearer-token secret | `SOCKET_BEARER_TOKEN` |
 | `socket.failOpen` | Allow downloads if API unavailable | `true` |
 | `socket.cacheTtl` | Cache TTL in seconds | `600` |
 | `socket.logLevel` | Log level (error, warn, info, debug) | `""` (info) |
@@ -160,6 +163,30 @@ registries:
 | `initContainers.certGenerator.securityContext` | generate-certs init container security context | PSS restricted |
 
 See [values.yaml](values.yaml) for all options.
+
+### Client Auth Gate (bearer token)
+
+By default the firewall accepts requests from anyone who can reach it. To require
+callers to authenticate, set a bearer token — the firewall then rejects any request
+without a matching `Authorization: Bearer <token>` header.
+
+```bash
+# Inline token (chart creates the secret for you)
+helm install fw . \
+  --set socket.apiToken=$SOCKET_API_TOKEN \
+  --set socket.bearerToken=$MY_SHARED_SECRET
+
+# Or reference a secret you manage
+kubectl create secret generic fw-bearer \
+  --from-literal=SOCKET_BEARER_TOKEN=$MY_SHARED_SECRET
+helm install fw . \
+  --set socket.apiToken=$SOCKET_API_TOKEN \
+  --set socket.bearerTokenExistingSecret=fw-bearer
+```
+
+The token is mounted into the pod as the `SOCKET_BEARER_TOKEN` env var, which the
+firewall reads at startup. Clients (npm, pip, CI, etc.) must send the same value in
+their `Authorization` header. Leaving both values empty keeps the gate disabled.
 
 ### Full Configuration Coverage
 
