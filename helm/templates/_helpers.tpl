@@ -123,6 +123,17 @@ Splunk secret name
 {{- end }}
 
 {{/*
+Bearer token secret name (client auth gate)
+*/}}
+{{- define "socket-firewall.bearerTokenSecretName" -}}
+{{- if .Values.socket.bearerTokenExistingSecret }}
+{{- .Values.socket.bearerTokenExistingSecret }}
+{{- else }}
+{{- include "socket-firewall.fullname" . }}-bearer-token
+{{- end }}
+{{- end }}
+
+{{/*
 TLS secret name
 */}}
 {{- define "socket-firewall.tlsSecretName" -}}

@@ -50,6 +50,15 @@ socket:
   configRefreshInterval: "60s"
   # Bearer token interpretation: "string" (literal token) or "env" (env var name)
   bearerTokenType: "string"
+  # Client auth gate: require inbound requests to present a matching
+  # "Authorization: Bearer <token>" header. Leave empty to disable the gate
+  # (the default). When set, the token is mounted into the pod as the
+  # SOCKET_BEARER_TOKEN env var, which the firewall reads at startup.
+  bearerToken: ""
+  # Name of an existing secret containing the bearer token (mutually exclusive
+  # with bearerToken; use this to avoid putting the token in values)
+  bearerTokenExistingSecret: ""
+  bearerTokenExistingSecretKey: "SOCKET_BEARER_TOKEN"
   # Send usage/decision telemetry to Socket
   telemetryEnabled: true
   # Telemetry API version: v1 (batched) or v0 (legacy per-event)
