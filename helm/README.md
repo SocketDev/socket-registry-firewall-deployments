@@ -126,6 +126,7 @@ registries:
 | `tls.generateSelfSigned` | Generate self-signed certs | `true` |
 | `tls.existingSecret` | Use existing TLS secret | `""` |
 | `service.type` | Service type | `ClusterIP` |
+| `service.externalTrafficPolicy` | `Cluster` or `Local` (NodePort/LoadBalancer only); use `Local` to preserve client source IPs | `""` |
 | `ingress.enabled` | Enable Ingress | `false` |
 | `ingress.className` | Ingress class (nginx, alb, traefik) | `""` |
 | `autoscaling.enabled` | Enable HorizontalPodAutoscaler | `false` |
