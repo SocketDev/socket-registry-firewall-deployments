@@ -5,6 +5,7 @@ charts/
 # IDE
 .idea/
 .vscode/
+settings.json
 *.swp
 *.swo
 

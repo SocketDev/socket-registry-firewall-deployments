@@ -600,6 +600,12 @@ service:
   containerHttpsPort: ""
   # Override HTTPS targetPort (set to "http" when TLS is terminated at the load balancer)
   httpsTargetPort: ""
+  # External traffic policy (Cluster or Local). Only applies when type is
+  # NodePort or LoadBalancer. Set to "Local" to preserve client source IPs;
+  # the default "Cluster" policy SNATs traffic forwarded across nodes (e.g. to
+  # a link-local 169.254.x.x address on GKE Dataplane v2 passthrough LBs).
+  # Note: with "Local", only nodes running a firewall pod receive traffic.
+  externalTrafficPolicy: ""
   annotations: {}
     # service.beta.kubernetes.io/aws-load-balancer-internal: "true"
     # service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
