@@ -9,7 +9,7 @@ name: Release Chart
 on:
   push:
     branches: [main]
-    paths: ['helm/Chart.yaml']   # fires on a chart version bump
+    paths: ['helm/Chart.yaml', 'helm/README.md']   # fires on a chart version bump or chart-README change
   workflow_dispatch: {}          # manual re-publish of the current version
 
 permissions:
@@ -46,6 +46,10 @@ jobs:
           git clone --branch gh-pages --single-branch \
             git@github.com:socketdev-demo/socket-firewall-helm.git pages
           cp .deploy/*.tgz pages/
+          # Keep the gh-pages landing page in sync with the chart README so the
+          # published values table never drifts from the chart (CE-238). The
+          # landing page renders README.md as its index.
+          cp helm/README.md pages/README.md
           # Re-index against the full gh-pages contents so all prior versions are
           # preserved; the published URL is unchanged.
           helm repo index pages --url https://socketdev-demo.github.io/socket-firewall-helm
