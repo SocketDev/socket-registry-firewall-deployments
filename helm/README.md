@@ -146,6 +146,7 @@ registries:
 | `forwardProxy.service.enabled` | Create a dedicated L4 Service for CONNECT (required to expose it externally) | `false` |
 | `forwardProxy.service.type` | `LoadBalancer` (NLB) or `NodePort` — **not** behind an ALB/L7 ingress | `LoadBalancer` |
 | `forwardProxy.service.annotations` | Annotations for the L4 Service (e.g. AWS NLB) | `{}` |
+| `forwardProxy.service.externalTrafficPolicy` | `Cluster` or `Local` (NodePort/LoadBalancer only); use `Local` to preserve client source IPs for the per-source-IP tunnel cap and logs | `""` |
 | `forwardProxy.service.loadBalancerSourceRanges` | CIDRs allowed to reach the CONNECT listener (your CASB egress) | `[]` |
 | **Metrics & Monitoring** | _Prometheus metrics — see [section below](#metrics--monitoring)_ | |
 | `metrics.enabled` | Expose the `/metrics` port on the container and Service | `true` |

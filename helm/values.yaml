@@ -394,6 +394,14 @@ forwardProxy:
     annotations: {}
     # Fixed nodePort (30000-32767) when type=NodePort. Empty = auto-assign.
     nodePort: ""
+    # External traffic policy (Cluster or Local). Only applies when type is
+    # NodePort or LoadBalancer. Set to "Local" to preserve client source IPs,
+    # which the CONNECT listener uses for the per-source-IP tunnel cap
+    # (maxConnectionsPerSource) and for meaningful client IPs in logs. The
+    # default "Cluster" policy SNATs cross-node traffic, so every tunnel appears
+    # to originate from a node IP. Note: with "Local", only nodes running a
+    # firewall pod receive traffic.
+    externalTrafficPolicy: ""
     # Restrict source CIDRs that may reach the listener (e.g. CASB egress).
     loadBalancerSourceRanges: []
 
