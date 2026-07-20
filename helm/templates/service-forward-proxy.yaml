@@ -17,6 +17,9 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.forwardProxy.service.type }}
+  {{- if and .Values.forwardProxy.service.externalTrafficPolicy (has .Values.forwardProxy.service.type (list "NodePort" "LoadBalancer")) }}
+  externalTrafficPolicy: {{ .Values.forwardProxy.service.externalTrafficPolicy }}
+  {{- end }}
   {{- with .Values.forwardProxy.service.loadBalancerSourceRanges }}
   loadBalancerSourceRanges:
     {{- toYaml . | nindent 4 }}
