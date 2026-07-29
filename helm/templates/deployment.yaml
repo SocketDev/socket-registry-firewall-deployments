@@ -112,6 +112,11 @@ spec:
               DOMAINS="$DOMAINS,DNS:{{ . }}"
               {{- end }}
               {{- end }}
+              {{- if .Values.registries.huggingface.enabled }}
+              {{- range .Values.registries.huggingface.domains }}
+              DOMAINS="$DOMAINS,DNS:{{ . }}"
+              {{- end }}
+              {{- end }}
               {{- end }}
               {{- if .Values.dnsRouting.enabled }}
               {{- if has "npm" .Values.dnsRouting.registries }}
@@ -140,6 +145,9 @@ spec:
               {{- end }}
               {{- if has "conda" .Values.dnsRouting.registries }}
               DOMAINS="$DOMAINS,DNS:conda.anaconda.org"
+              {{- end }}
+              {{- if has "huggingface" .Values.dnsRouting.registries }}
+              DOMAINS="$DOMAINS,DNS:huggingface.co,DNS:hf.co"
               {{- end }}
               {{- end }}
               # Remove leading comma
