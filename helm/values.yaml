@@ -3,10 +3,9 @@
 # Image configuration
 image:
   repository: socketdev/socket-registry-firewall
-  # Leave empty to track the chart's appVersion (Chart.yaml), which is the single
-  # source of truth for the firewall version. Set a value here only to override
-  # the pinned version, e.g. tag: "1.1.327".
-  tag: ""
+  # Keep in sync with Chart.yaml appVersion. Leave empty only if you intentionally
+  # want to track whatever appVersion the installed chart carries.
+  tag: "2.0.11"
   pullPolicy: Always
 
 # Image pull secrets for private registries

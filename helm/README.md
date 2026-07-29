@@ -90,7 +90,7 @@ registries:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `image.repository` | Docker image | `socketdev/socket-registry-firewall` |
-| `image.tag` | Image tag. Empty means track the chart's `appVersion` (single source of truth). Set to override. | `""` |
+| `image.tag` | Image tag. Keep in sync with chart `appVersion`. Empty falls back to `appVersion`. | `"2.0.11"` |
 | `image.pullPolicy` | Image pull policy | `Always` |
 | `replicaCount` | Number of replicas (ignored if autoscaling enabled) | `1` |
 | `socket.apiToken` | Socket API token | `""` |
