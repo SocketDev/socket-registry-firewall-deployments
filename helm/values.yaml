@@ -3,10 +3,9 @@
 # Image configuration
 image:
   repository: socketdev/socket-registry-firewall
-  # Leave empty to track the chart's appVersion (Chart.yaml), which is the single
-  # source of truth for the firewall version. Set a value here only to override
-  # the pinned version, e.g. tag: "1.1.327".
-  tag: ""
+  # Keep in sync with Chart.yaml appVersion. Leave empty only if you intentionally
+  # want to track whatever appVersion the installed chart carries.
+  tag: "2.0.11"
   pullPolicy: Always
 
 # Image pull secrets for private registries
@@ -59,10 +58,8 @@ socket:
   # with bearerToken; use this to avoid putting the token in values)
   bearerTokenExistingSecret: ""
   bearerTokenExistingSecretKey: "SOCKET_BEARER_TOKEN"
-  # Send usage/decision telemetry to Socket
+  # Send usage/decision telemetry to Socket (batched /v1 events endpoint)
   telemetryEnabled: true
-  # Telemetry API version: v1 (batched) or v0 (legacy per-event)
-  telemetryApiVersion: "v1"
   # Include ignore_reason in decision events sent to telemetry/webhook/splunk
   saveIgnoreReason: false
   # Header echoed in logs/telemetry for request correlation
@@ -83,7 +80,7 @@ socket:
   rewritePackageUrls: true
   # Ecosystems where recentlyPublished alerts are enforced.
   # Empty list = enforced globally per Socket API severity.
-  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx
+  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx, huggingface
   recentlyPublishedEnabledEcosystems: []
 
   # Socket API endpoint. Empty uses the firewall default (https://api.socket.dev).
@@ -110,8 +107,12 @@ socket:
   healthApiToken: ""
   # Restrict debug logging to requests whose User-Agent matches this glob (e.g. "*pip*").
   debugUserAgentFilter: ""
-  # Socket API read timeout (seconds). Leave null to inherit proxy.readTimeout.
+  # Socket API timeouts (seconds), split into connect/send/read phases so an
+  # unreachable API fails fast on connect instead of burning the full read budget.
+  # Leave null to inherit firewall defaults (read ← proxy.readTimeout; connect=5; send=10).
   apiReadTimeout: null
+  apiConnectTimeout: null
+  apiSendTimeout: null
   # Per-action log levels for SOCKET_DECISION output (error | warn | notice | info | debug).
   # Empty uses the firewall defaults (block=error, warn=warn, monitor=notice, ignore=debug).
   blockLogLevel: ""
@@ -125,14 +126,46 @@ socket:
   #     allow_unknown: true
   ecosystemParams: {}
 
+  # API resilience — circuit breaker for the Socket /purl verdict API. When the
+  # API is slow or erroring the breaker trips open and the firewall fast-fails
+  # (serves cache / fail_open policy) instead of blocking each request on a
+  # degraded API, then probes for recovery in the background. Thresholds are
+  # optional; omit/leave defaults to use the firewall built-ins.
+  resilience:
+    circuitBreaker:
+      enabled: true
+      # Trip sensitivity
+      latencyEwmaThresholdMs: 10000
+      ewmaAlpha: 0.3
+      errorRateThreshold: 0.5
+      errorMinRequests: 20
+      errorWindowS: 10
+      # Fast-fail duration + recovery backoff while OPEN
+      openWindowS: 30
+      maxOpenWindowS: 300
+      backoffFactor: 2
+      # Recovery probing (HALF-OPEN)
+      halfopenProbes: 3
+      halfopenProbeSpacingS: 1
+      probeTimeoutMs: 10000
+
 # Cache freshness / revalidation (Socket API response cache). See socket.cacheTtl for ttl.
 cache:
   # Lease held while revalidating a stale entry (seconds; 0 disables the lock).
   revalidationLockLeaseSeconds: 0
   # Jitter added to revalidation scheduling to avoid thundering herds (seconds).
   revalidationJitterSeconds: 120
-  # Revalidate stale entries asynchronously (serve stale, refresh in background).
-  revalidationAsync: true
+  # false (default): on expiry the lock winner revalidates live (bounded by the
+  # circuit breaker) instead of serving stale first. true restores serve-stale-
+  # while-async-refresh. Expired ALLOWs are confirmed live regardless (see below).
+  revalidationAsync: false
+  # Confirm-stale-ALLOW: how an expired ALLOW is handled (a stale BLOCK is always
+  # served stale). Valid: serve_stale | wait | confirm_when_degraded | fail_when_degraded
+  confirmAllowMode: wait
+  # Proactive cache warming (requires Redis; worker 0 only). Opt-in — disabled
+  # by default; no-op when Redis is disabled.
+  warmEnabled: false
+  warmInterval: 60
 
 # Top-level nginx keepalive timeout (seconds).
 keepaliveTimeout: 65
@@ -229,6 +262,9 @@ pathRouting:
   # - path: /conda
   #   upstream: https://conda.anaconda.org
   #   registry: conda
+  # - path: /huggingface
+  #   upstream: https://huggingface.co
+  #   registry: huggingface
 
 # Domain-based routing (alternative — each registry gets its own subdomain)
 # Only used when pathRouting.enabled is false.
@@ -274,6 +310,13 @@ registries:
     enabled: false
     domains:
       - conda.firewall.local
+  huggingface:
+    enabled: false
+    domains:
+      - huggingface.firewall.local
+    # upstream: https://huggingface.co
+    # upstreamToken: HF_AUTH_TOKEN
+    # upstreamTokenSecret: socket-upstream-tokens
 
 # DNS override mode (transparent proxy with real registry hostnames pointed at the firewall)
 #
@@ -286,7 +329,7 @@ registries:
 dnsRouting:
   enabled: false
   # List which registries to route via DNS override.
-  # Supported values: npm, pypi, maven, cargo, rubygems, openvsx, nuget, go, conda
+  # Supported values: npm, pypi, maven, cargo, rubygems, openvsx, nuget, go, conda, huggingface
   # Example: --set dnsRouting.enabled=true --set 'dnsRouting.registries={npm,pypi}'
   registries: []
 
@@ -413,18 +456,18 @@ metadataFiltering:
   includeUncheckedVersions: true
   maxVersions: 100
   cacheTtl: 3600
-  batchSize: 4000
+  batchSize: 100
   # Max response body size subject to filtering.
   maxBodySize: "500m"
   # Ecosystems to skip filtering for (empty = filter all supported ecosystems).
   excludedEcosystems: []
-  # Prefetch package metadata to warm the filter cache.
-  prefetchEnabled: true
+  # Prefetch conda metadata to warm the filter cache.
+  prefetchEnabled: false
   prefetchTtl: 600
   prefetchMaxConcurrent: 2
   prefetchBatchConcurrency: 4
   # Max concurrent PURL batch API calls per inline metadata request.
-  metadataConcurrentBatch: 1
+  metadataConcurrentBatch: 4
   # Conda arches to prefetch (empty = firewall defaults: linux-64, linux-aarch64,
   # osx-64, osx-arm64, win-64, noarch).
   condaPrefetchArchs: []
@@ -432,8 +475,23 @@ metadataFiltering:
   maxConcurrent: 3
   # Total time budget per metadata filter operation (seconds).
   packageFilterTimeout: 60
+  # Max wait for a semaphore slot before giving up (seconds). Default tracks
+  # min(60, packageFilterTimeout) so it matches a typical client request timeout.
+  semaphoreWaitTimeout: 60
   # Retries for a failed PURL batch API call within the timeout budget (0 = none).
   packageFilterRetry: 0
+  # Finished-response body cache (stale-while-revalidate over the filtered body).
+  # Second staleness layer above the per-PURL verdict cache — keep OFF unless the
+  # confirm-ALLOW safeguard below is understood. Defaults OFF deliberately.
+  responseCacheEnabled: false
+  responseCacheTtl: 600           # max_age (seconds) before a full re-filter; 0 = inherit cacheTtl
+  responseCacheFresh: 60          # serve-without-upstream window (coalesces rapid repeats)
+  # Cache responses that forward Authorization upstream (per-credential namespace).
+  cacheAuthenticated: false
+  responseCacheExcludedEcosystems: []
+  # Confirm-stale-ALLOW for the response body cache. Valid:
+  # serve_stale | wait | confirm_when_degraded | fail_when_degraded
+  confirmAllowMode: wait
 
 # Redis caching for Socket API lookups
 redis:
@@ -520,6 +578,11 @@ webhook:
 # multi-replica deployments.
 externalRegistryCooldown:
   enabled: false
+  # Allow direct public-registry fallback queries (legacy pre-cooldown-API
+  # behavior). false (default): publish dates come from the Socket cooldown
+  # API or a configured private registry only. true: public registries may
+  # join the fallback chain (cooldown OR public).
+  enablePublicQuery: false
   # Block packages published more recently than this window.
   cooldownPeriod: "7d"
   checkInterval: "60s"

@@ -45,7 +45,6 @@ data:
       health_api_token: {{ .Values.socket.healthApiToken | quote }}
       {{- end }}
       telemetry_enabled: {{ .Values.socket.telemetryEnabled }}
-      telemetry_api_version: {{ .Values.socket.telemetryApiVersion | quote }}
       save_ignore_reason: {{ .Values.socket.saveIgnoreReason }}
       request_id_header: {{ .Values.socket.requestIdHeader | quote }}
       expose_unscanned_header: {{ .Values.socket.exposeUnscannedHeader }}
@@ -61,6 +60,12 @@ data:
       {{- end }}
       {{- if kindIs "float64" .Values.socket.apiReadTimeout }}
       api_read_timeout: {{ .Values.socket.apiReadTimeout }}
+      {{- end }}
+      {{- if kindIs "float64" .Values.socket.apiConnectTimeout }}
+      api_connect_timeout: {{ .Values.socket.apiConnectTimeout }}
+      {{- end }}
+      {{- if kindIs "float64" .Values.socket.apiSendTimeout }}
+      api_send_timeout: {{ .Values.socket.apiSendTimeout }}
       {{- end }}
       {{- if .Values.socket.blockLogLevel }}
       block_log_level: {{ .Values.socket.blockLogLevel }}
@@ -84,6 +89,24 @@ data:
       ecosystem_params:
         {{- toYaml .Values.socket.ecosystemParams | nindent 8 }}
       {{- end }}
+      {{- with .Values.socket.resilience }}
+      {{- with .circuitBreaker }}
+      resilience:
+        circuit_breaker:
+          enabled: {{ .enabled }}
+          latency_ewma_threshold_ms: {{ .latencyEwmaThresholdMs }}
+          ewma_alpha: {{ .ewmaAlpha }}
+          error_rate_threshold: {{ .errorRateThreshold }}
+          error_min_requests: {{ .errorMinRequests }}
+          error_window_s: {{ .errorWindowS }}
+          open_window_s: {{ .openWindowS }}
+          max_open_window_s: {{ .maxOpenWindowS }}
+          backoff_factor: {{ .backoffFactor }}
+          halfopen_probes: {{ .halfopenProbes }}
+          halfopen_probe_spacing_s: {{ .halfopenProbeSpacingS }}
+          probe_timeout_ms: {{ .probeTimeoutMs }}
+      {{- end }}
+      {{- end }}
 
     # Cache configuration
     cache:
@@ -91,6 +114,9 @@ data:
       revalidation_lock_lease_seconds: {{ .Values.cache.revalidationLockLeaseSeconds }}
       revalidation_jitter_seconds: {{ .Values.cache.revalidationJitterSeconds }}
       revalidation_async: {{ .Values.cache.revalidationAsync }}
+      confirm_allow_mode: {{ .Values.cache.confirmAllowMode }}
+      warm_enabled: {{ .Values.cache.warmEnabled }}
+      warm_interval: {{ .Values.cache.warmInterval }}
 
     # Top-level nginx keepalive timeout (seconds)
     keepalive_timeout: {{ .Values.keepaliveTimeout }}
@@ -342,6 +368,13 @@ data:
           - conda.anaconda.org
         upstream: https://conda.anaconda.org
       {{- end }}
+      {{- if has "huggingface" .Values.dnsRouting.registries }}
+      huggingface:
+        domains:
+          - huggingface.co
+          - hf.co
+        upstream: https://huggingface.co
+      {{- end }}
     {{- else if not .Values.pathRouting.enabled }}
     registries:
       {{- if .Values.registries.npm.enabled }}
@@ -461,6 +494,19 @@ data:
         upstream_token: {{ .Values.registries.conda.upstreamToken }}
         {{- end }}
       {{- end }}
+      {{- if .Values.registries.huggingface.enabled }}
+      huggingface:
+        domains:
+          {{- range .Values.registries.huggingface.domains }}
+          - {{ . }}
+          {{- end }}
+        {{- if .Values.registries.huggingface.upstream }}
+        upstream: {{ .Values.registries.huggingface.upstream }}
+        {{- end }}
+        {{- if .Values.registries.huggingface.upstreamToken }}
+        upstream_token: {{ .Values.registries.huggingface.upstreamToken }}
+        {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.metadataFiltering.enabled }}
@@ -480,7 +526,13 @@ data:
       metadata_concurrent_batch: {{ .Values.metadataFiltering.metadataConcurrentBatch }}
       max_concurrent: {{ .Values.metadataFiltering.maxConcurrent }}
       package_filter_timeout: {{ .Values.metadataFiltering.packageFilterTimeout }}
+      semaphore_wait_timeout: {{ .Values.metadataFiltering.semaphoreWaitTimeout }}
       package_filter_retry: {{ .Values.metadataFiltering.packageFilterRetry }}
+      response_cache_enabled: {{ .Values.metadataFiltering.responseCacheEnabled }}
+      response_cache_ttl: {{ .Values.metadataFiltering.responseCacheTtl }}
+      response_cache_fresh: {{ .Values.metadataFiltering.responseCacheFresh }}
+      cache_authenticated: {{ .Values.metadataFiltering.cacheAuthenticated }}
+      confirm_allow_mode: {{ .Values.metadataFiltering.confirmAllowMode }}
       {{- if .Values.metadataFiltering.excludedEcosystems }}
       excluded_ecosystems:
         {{- range .Values.metadataFiltering.excludedEcosystems }}
@@ -493,11 +545,18 @@ data:
         - {{ . }}
         {{- end }}
       {{- end }}
+      {{- if .Values.metadataFiltering.responseCacheExcludedEcosystems }}
+      response_cache_excluded_ecosystems:
+        {{- range .Values.metadataFiltering.responseCacheExcludedEcosystems }}
+        - {{ . }}
+        {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.externalRegistryCooldown.enabled }}
     external_registry_cooldown:
       enabled: true
+      enable_public_query: {{ .Values.externalRegistryCooldown.enablePublicQuery }}
       cooldown_period: {{ .Values.externalRegistryCooldown.cooldownPeriod | quote }}
       check_interval: {{ .Values.externalRegistryCooldown.checkInterval | quote }}
       redis_key_prefix: {{ .Values.externalRegistryCooldown.redisKeyPrefix | quote }}

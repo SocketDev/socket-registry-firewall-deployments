@@ -54,8 +54,13 @@ Parameters:
 
   ChartVersion:
     Type: String
-    Default: "0.2.4"
+    Default: "0.11.0"
     Description: Socket Firewall Helm chart version to install.
+
+  FirewallImageTag:
+    Type: String
+    Default: "2.0.11"
+    Description: socketdev/socket-registry-firewall image tag (must match chart appVersion).
 
 Resources:
 
@@ -169,5 +174,6 @@ Outputs:
         --version ${ChartVersion}
         --namespace ${Namespace} --create-namespace
         -f cloudformation/values/dns-override.values.yaml
+        --set image.tag=${FirewallImageTag}
         --set redis.host=${RedisReplicationGroup.PrimaryEndPoint.Address}
         --set socket.apiToken="$(aws secretsmanager get-secret-value --secret-id ${SocketApiTokenSecret} --query SecretString --output text)"
