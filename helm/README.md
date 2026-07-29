@@ -101,6 +101,11 @@ registries:
 | `socket.failOpen` | Allow downloads if API unavailable | `true` |
 | `socket.cacheTtl` | Cache TTL in seconds | `600` |
 | `socket.logLevel` | Log level (error, warn, info, debug) | `""` (info) |
+| `socket.apiConnectTimeout` / `apiSendTimeout` / `apiReadTimeout` | Socket API phase timeouts (seconds); null inherits firewall defaults | `null` |
+| `socket.resilience.circuitBreaker.enabled` | Circuit breaker for the Socket `/purl` API | `true` |
+| `cache.revalidationAsync` | Serve stale while refreshing (false = revalidate live by default) | `false` |
+| `cache.confirmAllowMode` | How expired ALLOWs are handled (`wait`, `serve_stale`, …) | `wait` |
+| `cache.warmEnabled` | Proactive cache warming (requires Redis) | `false` |
 | **Path-Based Routing** | | |
 | `pathRouting.enabled` | Enable path-based routing | `false` |
 | `pathRouting.domain` | Domain for path routing | `""` |
@@ -108,13 +113,16 @@ registries:
 | `pathRouting.routes` | List of path/upstream/registry route objects | `[]` |
 | **DNS Override Mode** | | |
 | `dnsRouting.enabled` | Enable DNS override (transparent proxy) mode | `false` |
-| `dnsRouting.registries` | List of registries to route via DNS override (npm, pypi, maven, cargo, rubygems, openvsx, nuget, go, conda) | `[]` |
+| `dnsRouting.registries` | List of registries to route via DNS override (npm, pypi, maven, cargo, rubygems, openvsx, nuget, go, conda, huggingface) | `[]` |
 | **Domain-Based Routing** | | |
-| `registries.<name>.enabled` | Enable registry (npm, pypi, maven, etc.) | `false` |
+| `registries.<name>.enabled` | Enable registry (npm, pypi, maven, huggingface, etc.) | `false` |
 | `registries.<name>.domains` | Custom domains for registry | `[]` |
 | **Integrations** | | |
 | `metadataFiltering.enabled` | Filter blocked packages from metadata | `false` |
+| `metadataFiltering.responseCacheEnabled` | Filtered-body response cache (opt-in) | `false` |
+| `metadataFiltering.semaphoreWaitTimeout` | Max wait for a metadata-filter semaphore slot (seconds) | `60` |
 | `externalRegistryCooldown.enabled` | Publish-date enforcement for ecosystems Socket doesn't natively support | `false` |
+| `externalRegistryCooldown.enablePublicQuery` | Allow public-registry cooldown fallback queries | `false` |
 | `redis.enabled` | Enable Redis caching for API lookups | `false` |
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
@@ -268,6 +276,7 @@ pathRouting:
 | NuGet | `/nuget/` | `api.nuget.org` |
 | Go | `/go/` | `proxy.golang.org` |
 | Conda | `/conda/` | `conda.anaconda.org` |
+| Hugging Face | `/huggingface/` | `huggingface.co` |
 
 ### Domain-Based Routing
 
@@ -318,6 +327,7 @@ helm install socket-firewall . \
 | Go | `proxy.golang.org` |
 | OpenVSX | `open-vsx.org` |
 | Conda | `conda.anaconda.org` |
+| Hugging Face | `huggingface.co`, `hf.co` |
 
 **Combining with path routing:** DNS override and path routing can be enabled together for hybrid deployments. For example, use path routing for CI/CD systems that can be reconfigured, and DNS override for developer laptops that should work without configuration changes.
 
