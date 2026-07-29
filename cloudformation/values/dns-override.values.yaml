@@ -110,21 +110,22 @@ metadataFiltering:
   includeUncheckedVersions: true
   maxVersions: 100
   cacheTtl: 3600
-  batchSize: 4000
+  batchSize: 100
   maxBodySize: "500m"
   excludedEcosystems: []
-  prefetchEnabled: true
+  prefetchEnabled: false
   prefetchTtl: 600
   prefetchMaxConcurrent: 2
   prefetchBatchConcurrency: 4
-  metadataConcurrentBatch: 1
+  metadataConcurrentBatch: 4
+  condaPrefetchArchs: []
   maxConcurrent: 3
   packageFilterTimeout: 60
   semaphoreWaitTimeout: 60
   packageFilterRetry: 0
   responseCacheEnabled: false
   responseCacheTtl: 600
-  responseCacheFresh: 5
+  responseCacheFresh: 60
   cacheAuthenticated: false
   responseCacheExcludedEcosystems: []
   confirmAllowMode: wait
