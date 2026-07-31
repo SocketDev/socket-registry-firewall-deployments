@@ -14,7 +14,7 @@ On EKS the firewall is the **Helm chart** (`../helm`), which already supports DN
 |------|---------|
 | `eks-cluster.yaml` | **Greenfield wrapper** — VPC + EKS cluster + node group + OIDC provider. Skip if you already run a cluster. |
 | `firewall-eks.yaml` | **Shared base** — ElastiCache Redis + Socket token (Secrets Manager) + IRSA role; emits the `helm upgrade --install` command. |
-| `values/dns-override.values.yaml` | Example Helm values (DNS-override + Redis + self-signed certs). Behavioral defaults stay synced with `helm/values.yaml`; image pinned to `2.0.11`. |
+| `values/dns-override.values.yaml` | Example Helm values (DNS-override + Redis + self-signed certs). Behavioral defaults stay synced with `helm/values.yaml`; image pinned to `2.0.13`. |
 
 ## Cases
 
@@ -29,7 +29,7 @@ The base template currently takes the **handoff** approach: CloudFormation provi
 
 ## Config model
 
-On EKS the Helm chart renders the firewall config into a **ConfigMap**. The stack injects install-time values for the ElastiCache endpoint (`redis.host`), the Socket token (`socket.apiToken`, read from Secrets Manager), and the firewall image tag (`image.tag`, default `2.0.11`). Chart version defaults to `0.11.0`.
+On EKS the Helm chart renders the firewall config into a **ConfigMap**. The stack injects install-time values for the ElastiCache endpoint (`redis.host`), the Socket token (`socket.apiToken`, read from Secrets Manager), and the firewall image tag (`image.tag`, default `2.0.13`). Chart version defaults to `0.11.1`.
 
 ## Known DRAFT caveats
 

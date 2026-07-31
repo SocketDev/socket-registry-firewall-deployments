@@ -5,7 +5,7 @@ image:
   repository: socketdev/socket-registry-firewall
   # Keep in sync with Chart.yaml appVersion. Leave empty only if you intentionally
   # want to track whatever appVersion the installed chart carries.
-  tag: "2.0.11"
+  tag: "2.0.13"
   pullPolicy: Always
 
 # Image pull secrets for private registries
