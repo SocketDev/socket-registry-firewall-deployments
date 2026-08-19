@@ -44,7 +44,6 @@ data:
       {{- if .Values.socket.healthApiToken }}
       health_api_token: {{ .Values.socket.healthApiToken | quote }}
       {{- end }}
-      telemetry_enabled: {{ .Values.socket.telemetryEnabled }}
       save_ignore_reason: {{ .Values.socket.saveIgnoreReason }}
       request_id_header: {{ .Values.socket.requestIdHeader | quote }}
       expose_unscanned_header: {{ .Values.socket.exposeUnscannedHeader }}

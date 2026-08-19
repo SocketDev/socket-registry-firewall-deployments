@@ -58,8 +58,6 @@ socket:
   # with bearerToken; use this to avoid putting the token in values)
   bearerTokenExistingSecret: ""
   bearerTokenExistingSecretKey: "SOCKET_BEARER_TOKEN"
-  # Send usage/decision telemetry to Socket (batched /v1 events endpoint)
-  telemetryEnabled: true
   # Include ignore_reason in decision events sent to telemetry/webhook/splunk
   saveIgnoreReason: false
   # Header echoed in logs/telemetry for request correlation

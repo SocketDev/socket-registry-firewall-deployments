@@ -29,7 +29,6 @@ socket:
   useRemoteConfig: false
   configRefreshInterval: "60s"
   bearerTokenType: "string"
-  telemetryEnabled: true
   saveIgnoreReason: false
   requestIdHeader: "X-Socket-Request-ID"
   exposeUnscannedHeader: false
