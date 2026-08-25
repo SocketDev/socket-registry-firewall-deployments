@@ -17,7 +17,7 @@ image:
   repository: socketdev/socket-registry-firewall
   # Pin explicitly so CloudFormation installs don't drift if the chart
   # appVersion changes independently. Never use :latest for a security product.
-  tag: "2.2.0"
+  tag: "2.3.3"
   pullPolicy: Always
 
 socket:
