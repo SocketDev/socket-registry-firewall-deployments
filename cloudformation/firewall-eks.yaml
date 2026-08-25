@@ -54,12 +54,12 @@ Parameters:
 
   ChartVersion:
     Type: String
-    Default: "0.11.3"
+    Default: "0.11.4"
     Description: Socket Firewall Helm chart version to install.
 
   FirewallImageTag:
     Type: String
-    Default: "2.2.0"
+    Default: "2.3.3"
     Description: socketdev/socket-registry-firewall image tag (must match chart appVersion).
 
 Resources:
