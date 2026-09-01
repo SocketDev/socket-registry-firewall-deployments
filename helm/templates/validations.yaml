@@ -1,0 +1,44 @@
+{{- /*
+Render-time configuration guards. This file renders no manifests — it only
+fails fast on configurations that would deploy but not work. Structural /
+type validation lives in values.schema.json; the checks here are the
+cross-field rules a schema can't express.
+
+Note: `fail` is a no-op under `helm lint` (lint mode); these guards enforce
+on `helm install`, `helm upgrade`, and `helm template`.
+*/ -}}
+
+{{- $socket := .Values.socket | default dict -}}
+{{- $redis := .Values.redis | default dict -}}
+{{- $pathRouting := .Values.pathRouting | default dict -}}
+
+{{- /* Path routing enabled with no route source: the firewall starts fine but
+       has nothing to match, so every request 404s. Routes can come from the
+       inline list, a routes CSV file, or private-registry auto-discovery. */ -}}
+{{- if $pathRouting.enabled -}}
+{{- $hasRoutes := not (empty $pathRouting.routes) -}}
+{{- $hasRoutesFile := not (empty $pathRouting.routesFile) -}}
+{{- $hasAutoDiscovery := and $pathRouting.privateRegistry (($pathRouting.privateRegistry).enabled) -}}
+{{- if not (or $hasRoutes $hasRoutesFile $hasAutoDiscovery) -}}
+{{- fail "pathRouting.enabled is true but pathRouting.routes is empty and no routesFile is set. The firewall would deploy with no routes and return 404 for all traffic. Define pathRouting.routes, set pathRouting.routesFile, or enable pathRouting.privateRegistry auto-discovery." -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* ElastiCache cluster-mode configuration endpoints (clustercfg.*) hand out
+       MOVED redirects across shards. The firewall's Redis client is a
+       single-endpoint client and cannot follow them, so every cache operation
+       fails at runtime even though the deployment looks healthy. */ -}}
+{{- if $redis.enabled -}}
+{{- $redisHost := (toString ($redis.host | default "")) | trimAll " " -}}
+{{- if hasPrefix "clustercfg." $redisHost -}}
+{{- fail (printf "redis.host %q is an ElastiCache cluster-mode configuration endpoint (clustercfg.*). The firewall uses a single-endpoint Redis client and cannot follow the MOVED redirects a cluster-mode-enabled group issues, so caching would fail at runtime. Use a cluster-mode-disabled replication group and point redis.host at its primary endpoint." $redisHost) -}}
+{{- end -}}
+{{- end -}}
+
+{{- /* The deployment always mounts SOCKET_SECURITY_API_TOKEN from a Secret,
+       but the chart only creates that Secret when socket.apiToken is set.
+       With neither value the pods reference a Secret that doesn't exist and
+       stay stuck in CreateContainerConfigError. */ -}}
+{{- if and (empty $socket.apiToken) (empty $socket.existingSecret) -}}
+{{- fail "Set socket.apiToken or socket.existingSecret. The deployment mounts SOCKET_SECURITY_API_TOKEN from a Secret; without either value the pods reference a Secret Helm does not create. If you manage that Secret out of band, set socket.existingSecret to its name." -}}
+{{- end -}}

@@ -244,6 +244,31 @@ helm install socket-firewall . -f examples/remote-first.yaml \
   --set ingress.hosts[0].host=sfw.yourcompany.com
 ```
 
+## Validating Your Configuration
+
+The chart validates values at three points:
+
+1. **Schema validation** (`values.schema.json`) runs automatically on every
+   `helm install`, `helm upgrade`, `helm lint`, and `helm template`. It checks
+   types and rejects unknown keys.
+2. **Render-time guards** (`templates/validations.yaml`) fail the render with an
+   actionable message for configurations that would deploy but not work:
+   path routing enabled with no routes, an ElastiCache cluster-mode
+   (`clustercfg.*`) Redis endpoint, or no Socket API token / existing secret.
+3. **Post-install tests** verify the live deployment — health endpoint, egress
+   to the Socket API, Redis connectivity (via `/metrics`), and route matching:
+
+   ```bash
+   helm test <release> -n <namespace>
+   ```
+
+> **Strictness change:** unknown top-level keys in your values now fail
+> validation instead of being silently ignored. This is deliberate — it catches
+> indentation accidents (e.g. a `pathRouting:` block whose children slip to the
+> top level and leave the firewall with zero routes) and dead config (e.g. an
+> `env:` block no template reads). If you need to pass config keys the chart
+> doesn't expose, use `extraConfig` (raw `socket.yml` passthrough).
+
 ## Proxy Modes
 
 ### Path-Based Routing (Recommended)
