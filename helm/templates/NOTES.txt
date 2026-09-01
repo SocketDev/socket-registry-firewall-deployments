@@ -137,4 +137,36 @@ Set metrics.serviceMonitor.enabled=true (Prometheus Operator) or metrics.podAnno
 {{- end }}
 {{- end }}
 
+{{- $socket := .Values.socket | default dict }}
+{{- $ingress := .Values.ingress | default dict }}
+{{- $albScheme := index ($ingress.annotations | default dict) "alb.ingress.kubernetes.io/scheme" | default "" }}
+{{- $noClientAuth := and (not $socket.bearerToken) (not $socket.bearerTokenExistingSecret) (not $socket.basicAuthUsername) }}
+{{- $openProxy := and $ingress.enabled (eq $albScheme "internet-facing") $noClientAuth }}
+{{- if or $socket.failOpen $openProxy }}
+
+## Warnings
+{{- if $socket.failOpen }}
+
+- socket.failOpen is true: whenever the Socket API is unreachable, packages are
+  allowed through UNSCANNED. Set socket.failOpen=false for fail-closed behavior
+  (blocks all packages while the API is down).
+{{- end }}
+{{- if $openProxy }}
+
+- The ALB ingress scheme is "internet-facing" and no client auth is configured
+  (socket.bearerToken, socket.bearerTokenExistingSecret, and
+  socket.basicAuthUsername are all empty). The firewall will accept
+  unauthenticated internet traffic and can be used as an open proxy to the
+  upstream registries. Enable the client auth gate (see "Client Auth Gate" in
+  README.md) and/or restrict the ALB's security groups to trusted CIDRs.
+{{- end }}
+{{- end }}
+
+## Validate
+
+Run the chart's built-in checks against the live deployment
+(health endpoint, Socket API egress, Redis, and route matching):
+
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
 See deployment recommendations in README.md for production setup.

@@ -1,0 +1,693 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "socket-firewall Helm chart values",
+  "description": "Validates values on install/upgrade/lint. The root rejects unknown top-level keys so indentation accidents (e.g. a pathRouting block whose children land at the top level) and dead config (e.g. a stray env: block no template reads) fail fast instead of being silently ignored. Use extraConfig for raw socket.yml passthrough.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "ecosystem": {
+      "type": "string",
+      "enum": ["npm", "pypi", "maven", "cargo", "rubygems", "nuget", "go", "conda", "openvsx", "huggingface"]
+    },
+    "portLike": {
+      "type": ["integer", "string"]
+    },
+    "nullablePort": {
+      "type": ["integer", "string", "null"]
+    },
+    "nullableBool": {
+      "type": ["boolean", "null"]
+    },
+    "nullableNumber": {
+      "type": ["number", "null"]
+    },
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "freeformObject": {
+      "type": "object"
+    },
+    "objectArray": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "decisionLogLevel": {
+      "type": "string",
+      "enum": ["", "error", "warn", "notice", "info", "debug"]
+    },
+    "confirmAllowMode": {
+      "type": "string",
+      "enum": ["serve_stale", "wait", "confirm_when_degraded", "fail_when_degraded"]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "registry"],
+      "properties": {
+        "path": { "type": "string" },
+        "upstream": { "type": "string" },
+        "registry": { "$ref": "#/definitions/ecosystem" },
+        "mode": { "type": "string", "enum": ["rewrite", "proxy"] },
+        "upstreamType": { "type": "string", "enum": ["", "artifactory"] },
+        "upstreamHost": { "type": "string" },
+        "upstreamToken": { "type": "string" },
+        "upstreamTokenSecret": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "artifactoryRepo": { "type": "string" },
+        "cooldownName": { "type": "string" },
+        "cooldownEcosystem": { "type": "string" },
+        "repoKey": { "type": "string" }
+      }
+    },
+    "registryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "domains": { "$ref": "#/definitions/stringArray" },
+        "upstream": { "type": "string" },
+        "upstreamToken": { "type": "string" },
+        "upstreamTokenSecret": { "type": "string" }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object"
+    }
+  },
+  "properties": {
+    "global": { "$ref": "#/definitions/freeformObject" },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "$ref": "#/definitions/objectArray" },
+    "replicaCount": { "type": "integer" },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "$ref": "#/definitions/portLike" },
+        "maxUnavailable": { "$ref": "#/definitions/portLike" }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer" },
+        "maxReplicas": { "type": "integer" },
+        "targetCPUUtilizationPercentage": { "type": "integer" },
+        "targetMemoryUtilizationPercentage": { "type": "integer" }
+      }
+    },
+    "socket": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiToken": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "failOpen": { "type": "boolean" },
+        "failOpenUnscanned": { "type": "boolean" },
+        "useRemoteConfig": { "type": "boolean" },
+        "configRefreshInterval": { "type": "string" },
+        "bearerTokenType": { "type": "string", "enum": ["string", "env"] },
+        "bearerToken": { "type": "string" },
+        "bearerTokenExistingSecret": { "type": "string" },
+        "bearerTokenExistingSecretKey": { "type": "string" },
+        "saveIgnoreReason": { "type": "boolean" },
+        "requestIdHeader": { "type": "string" },
+        "exposeUnscannedHeader": { "type": "boolean" },
+        "cacheTtl": { "type": "integer" },
+        "logLevel": { "type": "string", "enum": ["", "error", "warn", "info", "debug"] },
+        "logMaxBodySize": { "type": "integer" },
+        "logNoRoute": { "type": "boolean" },
+        "debugLoggingEnabled": { "type": "boolean" },
+        "rewritePackageUrls": { "type": "boolean" },
+        "recentlyPublishedEnabledEcosystems": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ecosystem" }
+        },
+        "apiUrl": { "type": "string" },
+        "apiSslVerify": { "type": "boolean" },
+        "apiSslCaCert": { "type": "string" },
+        "upstreamSslVerify": { "$ref": "#/definitions/nullableBool" },
+        "upstreamSslCaCert": { "type": "string" },
+        "outboundProxy": { "type": "string" },
+        "noProxy": { "type": "string" },
+        "deployment": { "type": "string" },
+        "basicAuthUsername": { "type": "string" },
+        "basicAuthPassword": { "type": "string" },
+        "healthApiToken": { "type": "string" },
+        "debugUserAgentFilter": { "type": "string" },
+        "apiReadTimeout": { "$ref": "#/definitions/nullableNumber" },
+        "apiConnectTimeout": { "$ref": "#/definitions/nullableNumber" },
+        "apiSendTimeout": { "$ref": "#/definitions/nullableNumber" },
+        "blockLogLevel": { "$ref": "#/definitions/decisionLogLevel" },
+        "warnLogLevel": { "$ref": "#/definitions/decisionLogLevel" },
+        "monitorLogLevel": { "$ref": "#/definitions/decisionLogLevel" },
+        "ignoreLogLevel": { "$ref": "#/definitions/decisionLogLevel" },
+        "ecosystemParams": {
+          "type": "object",
+          "additionalProperties": { "type": "object" }
+        },
+        "resilience": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "circuitBreaker": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "latencyEwmaThresholdMs": { "type": "number" },
+                "ewmaAlpha": { "type": "number" },
+                "errorRateThreshold": { "type": "number" },
+                "errorMinRequests": { "type": "number" },
+                "errorWindowS": { "type": "number" },
+                "openWindowS": { "type": "number" },
+                "maxOpenWindowS": { "type": "number" },
+                "backoffFactor": { "type": "number" },
+                "halfopenProbes": { "type": "number" },
+                "halfopenProbeSpacingS": { "type": "number" },
+                "probeTimeoutMs": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "revalidationLockLeaseSeconds": { "type": "integer" },
+        "revalidationJitterSeconds": { "type": "integer" },
+        "revalidationAsync": { "type": "boolean" },
+        "confirmAllowMode": { "$ref": "#/definitions/confirmAllowMode" },
+        "warmEnabled": { "type": "boolean" },
+        "warmInterval": { "type": "integer" }
+      }
+    },
+    "keepaliveTimeout": { "type": "integer" },
+    "upstreamTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "pathRouting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "domain": { "type": "string" },
+        "allowedDomain": { "$ref": "#/definitions/stringArray" },
+        "mode": { "type": "string", "enum": ["", "local", "artifactory", "nexus", "downstream"] },
+        "configMode": { "type": "string", "enum": ["", "upstream", "middle"] },
+        "upstreamFqdn": { "type": "string" },
+        "rewriteScheme": { "type": "string", "enum": ["", "http", "https"] },
+        "clientRewriteScheme": { "type": "string", "enum": ["", "http", "https"] },
+        "useIncomingDomain": { "$ref": "#/definitions/nullableBool" },
+        "forwardForDomain": { "$ref": "#/definitions/nullableBool" },
+        "overrideLocationRewrite": { "$ref": "#/definitions/nullableBool" },
+        "overridePortHttp": { "$ref": "#/definitions/portLike" },
+        "overridePortHttps": { "$ref": "#/definitions/portLike" },
+        "routesFile": { "type": "string" },
+        "routes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/route" }
+        },
+        "privateRegistry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "type": { "type": "string", "enum": ["", "nexus", "artifactory"] },
+            "apiUrl": { "type": "string" },
+            "apiKey": { "type": "string" },
+            "username": { "type": "string" },
+            "password": { "type": "string" },
+            "interval": { "type": "string" },
+            "includePattern": { "type": "string" },
+            "excludePattern": { "type": "string" },
+            "ignoreSslErrors": { "type": "boolean" },
+            "supportedEcosystemsOnly": { "type": "boolean" },
+            "includeVirtual": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "registries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "npm": { "$ref": "#/definitions/registryEntry" },
+        "pypi": { "$ref": "#/definitions/registryEntry" },
+        "maven": { "$ref": "#/definitions/registryEntry" },
+        "rubygems": { "$ref": "#/definitions/registryEntry" },
+        "cargo": { "$ref": "#/definitions/registryEntry" },
+        "openvsx": { "$ref": "#/definitions/registryEntry" },
+        "nuget": { "$ref": "#/definitions/registryEntry" },
+        "go": { "$ref": "#/definitions/registryEntry" },
+        "conda": { "$ref": "#/definitions/registryEntry" },
+        "huggingface": { "$ref": "#/definitions/registryEntry" }
+      }
+    },
+    "dnsRouting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "registries": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ecosystem" }
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bufferSize": { "type": "string" },
+        "buffersCount": { "type": "integer" },
+        "buffersSize": { "type": "string" },
+        "busyBuffersSize": { "type": "string" },
+        "connectTimeout": { "type": "integer" },
+        "sendTimeout": { "type": "integer" },
+        "readTimeout": { "type": "integer" },
+        "stripRequestHeaders": { "$ref": "#/definitions/stringArray" }
+      }
+    },
+    "nginx": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workerProcesses": { "$ref": "#/definitions/portLike" },
+        "workerConnections": { "type": "integer" },
+        "workerRlimitNofile": { "type": "integer" },
+        "keepalivePoolSize": { "type": "integer" },
+        "typesHashMaxSize": { "type": "integer" },
+        "clientMaxBodySize": { "type": "string" },
+        "acceptMutex": { "type": ["string", "boolean"] },
+        "http2": { "type": "boolean" },
+        "resolver": { "type": "string" },
+        "resolverTimeout": { "type": "string" },
+        "accessLogBuffer": { "type": "string" },
+        "gzip": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": ["string", "boolean"] },
+            "minLength": { "type": "integer" }
+          }
+        },
+        "openFileCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max": { "type": "integer" },
+            "inactive": { "type": "string" }
+          }
+        },
+        "proxyCache": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": ["string", "boolean"] },
+            "path": { "type": "string" },
+            "size": { "type": "string" },
+            "inactive": { "type": "string" }
+          }
+        }
+      }
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "http": { "$ref": "#/definitions/nullablePort" },
+        "https": { "$ref": "#/definitions/nullablePort" },
+        "disableHttp": { "type": "boolean" },
+        "disableHttps": { "type": "boolean" }
+      }
+    },
+    "ssl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cert": { "type": "string" },
+        "key": { "type": "string" },
+        "caCert": { "type": "string" }
+      }
+    },
+    "lua": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cacheSize": { "type": "string" },
+        "statsSize": { "type": "string" }
+      }
+    },
+    "clientIp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "header": { "type": "string" },
+        "trustedProxies": { "$ref": "#/definitions/stringArray" },
+        "recursive": { "type": "boolean" }
+      }
+    },
+    "forwardProxy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "port": { "type": "integer" },
+        "maxTunnelLifetimeSeconds": { "type": "integer" },
+        "maxConnectionsPerSource": { "type": "integer" },
+        "proxyProtocolPort": { "type": "integer" },
+        "skipStreamLuaCheck": { "type": "boolean" },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+            "annotations": { "$ref": "#/definitions/freeformObject" },
+            "nodePort": { "$ref": "#/definitions/portLike" },
+            "externalTrafficPolicy": { "type": "string", "enum": ["", "Cluster", "Local"] },
+            "loadBalancerSourceRanges": { "$ref": "#/definitions/stringArray" }
+          }
+        }
+      }
+    },
+    "metadataFiltering": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "filterBlocked": { "type": "boolean" },
+        "filterWarn": { "type": "boolean" },
+        "includeUncheckedVersions": { "type": "boolean" },
+        "maxVersions": { "type": "integer" },
+        "cacheTtl": { "type": "integer" },
+        "batchSize": { "type": "integer" },
+        "maxBodySize": { "type": "string" },
+        "excludedEcosystems": { "$ref": "#/definitions/stringArray" },
+        "prefetchEnabled": { "type": "boolean" },
+        "prefetchTtl": { "type": "integer" },
+        "prefetchMaxConcurrent": { "type": "integer" },
+        "prefetchBatchConcurrency": { "type": "integer" },
+        "metadataConcurrentBatch": { "type": "integer" },
+        "condaPrefetchArchs": { "$ref": "#/definitions/stringArray" },
+        "maxConcurrent": { "type": "integer" },
+        "packageFilterTimeout": { "type": "integer" },
+        "semaphoreWaitTimeout": { "type": "integer" },
+        "packageFilterRetry": { "type": "integer" },
+        "responseCacheEnabled": { "type": "boolean" },
+        "responseCacheTtl": { "type": "integer" },
+        "responseCacheFresh": { "type": "integer" },
+        "cacheAuthenticated": { "type": "boolean" },
+        "responseCacheExcludedEcosystems": { "$ref": "#/definitions/stringArray" },
+        "confirmAllowMode": { "$ref": "#/definitions/confirmAllowMode" }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "password": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "db": { "type": "integer" },
+        "timeout": { "type": "integer" },
+        "poolSize": { "type": "integer" },
+        "ttl": { "type": "integer" },
+        "ssl": { "type": "boolean" },
+        "sslVerify": { "type": "boolean" },
+        "sslServerName": { "type": "string" },
+        "sslCaCert": { "type": "string" },
+        "sslCaCertExistingSecret": { "type": "string" },
+        "sslCaCertExistingSecretKey": { "type": "string" },
+        "sslClientCert": { "type": "string" },
+        "sslClientCertExistingSecret": { "type": "string" },
+        "sslClientCertExistingSecretKey": { "type": "string" },
+        "sslClientKey": { "type": "string" },
+        "sslClientKeyExistingSecret": { "type": "string" },
+        "sslClientKeyExistingSecretKey": { "type": "string" }
+      }
+    },
+    "splunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hecUrl": { "type": "string" },
+        "hecToken": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "index": { "type": "string" },
+        "source": { "type": "string" },
+        "sourcetype": { "type": "string" },
+        "sslVerify": { "type": "boolean" },
+        "timeout": { "type": "integer" },
+        "batchSize": { "type": "integer" }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "url": { "type": "string" },
+        "authHeader": { "type": "string" },
+        "sslVerify": { "type": "boolean" },
+        "timeout": { "type": "integer" },
+        "onBlock": { "type": "boolean" },
+        "onWarn": { "type": "boolean" },
+        "onMonitor": { "type": "boolean" },
+        "onIgnore": { "type": "boolean" },
+        "batchEnabled": { "type": "boolean" },
+        "batchSize": { "type": "integer" },
+        "batchPeriod": { "type": "integer" }
+      }
+    },
+    "externalRegistryCooldown": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "enablePublicQuery": { "type": "boolean" },
+        "cooldownPeriod": { "type": "string" },
+        "checkInterval": { "type": "string" },
+        "redisKeyPrefix": { "type": "string" },
+        "cacheTtl": { "type": "integer" },
+        "mode": { "type": "string", "enum": ["", "api", "local"] },
+        "fallback": { "type": "string", "enum": ["", "external", "artifactory", "nexus"] },
+        "registries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "url", "ecosystem"],
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "ecosystem": { "type": "string" },
+              "authType": { "type": "string", "enum": ["none", "basic", "bearer"] },
+              "authCredential": { "type": "string" },
+              "rateLimitHeader": { "type": "string" },
+              "ignoreSslErrors": { "type": "boolean" },
+              "timeout": { "type": "integer" },
+              "cooldownPeriod": { "type": "string" }
+            }
+          }
+        },
+        "privateRegistry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "authType": { "type": "string", "enum": ["bearer_token", "basic"] },
+            "authCredential": { "type": "string" },
+            "source": { "type": "string", "enum": ["auto", "artifactory", "nexus"] },
+            "includeUnsupportedOnly": { "type": "boolean" },
+            "includePattern": { "type": "string" },
+            "excludePattern": { "type": "string" },
+            "cooldownPeriod": { "type": "string" }
+          }
+        }
+      }
+    },
+    "extraConfig": { "$ref": "#/definitions/freeformObject" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minImageVersion": { "type": "string" },
+        "port": { "type": "integer" },
+        "podAnnotations": { "type": "boolean" },
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "namespace": { "type": "string" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "labels": { "$ref": "#/definitions/freeformObject" },
+            "honorLabels": { "type": "boolean" },
+            "relabelings": { "$ref": "#/definitions/objectArray" },
+            "metricRelabelings": { "$ref": "#/definitions/objectArray" }
+          }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "httpPort": { "type": "integer" },
+        "httpsPort": { "type": "integer" },
+        "containerHttpPort": { "$ref": "#/definitions/portLike" },
+        "containerHttpsPort": { "$ref": "#/definitions/portLike" },
+        "httpsTargetPort": { "$ref": "#/definitions/portLike" },
+        "externalTrafficPolicy": { "type": "string", "enum": ["", "Cluster", "Local"] },
+        "annotations": { "$ref": "#/definitions/freeformObject" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/freeformObject" },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "host": { "type": "string" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": { "type": "string" },
+                    "pathType": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "secretName": { "type": "string" },
+              "hosts": { "$ref": "#/definitions/stringArray" }
+            }
+          }
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generateSelfSigned": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "certManager": { "type": "boolean" },
+        "includeCaCrt": { "type": "boolean" },
+        "certificate": { "type": "string" },
+        "privateKey": { "type": "string" }
+      }
+    },
+    "resources": { "$ref": "#/definitions/freeformObject" },
+    "healthCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string" },
+        "initialDelaySeconds": { "type": "integer" },
+        "periodSeconds": { "type": "integer" },
+        "timeoutSeconds": { "type": "integer" },
+        "failureThreshold": { "type": "integer" }
+      }
+    },
+    "terminationGracePeriodSeconds": { "$ref": "#/definitions/portLike" },
+    "podAnnotations": { "$ref": "#/definitions/freeformObject" },
+    "podSecurityContext": { "$ref": "#/definitions/freeformObject" },
+    "securityContext": { "$ref": "#/definitions/freeformObject" },
+    "nodeSelector": { "$ref": "#/definitions/freeformObject" },
+    "tolerations": { "$ref": "#/definitions/objectArray" },
+    "affinity": { "$ref": "#/definitions/freeformObject" },
+    "topologySpreadConstraints": { "$ref": "#/definitions/objectArray" },
+    "extraContainers": { "$ref": "#/definitions/objectArray" },
+    "initContainers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "copyApp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "securityContext": { "$ref": "#/definitions/containerSecurityContext" }
+          }
+        },
+        "certGenerator": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "repository": { "type": "string" },
+                "tag": { "type": "string" },
+                "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+              }
+            },
+            "securityContext": { "$ref": "#/definitions/containerSecurityContext" }
+          }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "$ref": "#/definitions/freeformObject" }
+      }
+    }
+  }
+}

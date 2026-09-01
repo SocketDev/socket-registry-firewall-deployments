@@ -1,0 +1,80 @@
+{{- $fullname := include "socket-firewall.fullname" . -}}
+{{- $apiUrl := (.Values.socket).apiUrl | default "https://api.socket.dev" -}}
+{{- $healthPath := (.Values.healthCheck).path | default "/health" -}}
+{{- $pathRouting := .Values.pathRouting | default dict -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ $fullname }}-test-connection
+  labels:
+    {{- include "socket-firewall.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test-connection
+      image: curlimages/curl:8.11.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -u
+          BASE="http://{{ $fullname }}:{{ ((.Values.service).httpPort) | default 80 }}"
+          fail() {
+            echo "FAILED: $1"
+            exit 1
+          }
+
+          echo "==> [1] Health endpoint: GET ${BASE}{{ $healthPath }}"
+          code=$(curl -s --max-time 15 -o /tmp/health.out -w '%{http_code}' "${BASE}{{ $healthPath }}") || true
+          [ "$code" = "200" ] || fail "health check returned HTTP ${code} (expected 200). The firewall Service or pods are not serving traffic."
+          grep -q "Health OK" /tmp/health.out || fail "health check returned 200 but the body does not contain 'Health OK'."
+          echo "    OK (HTTP 200, body contains 'Health OK')"
+
+          echo "==> [2] Socket API egress: GET {{ $apiUrl }}/v0/quota (expect HTTP 401)"
+          code=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "{{ $apiUrl }}/v0/quota") || true
+          if [ "$code" != "401" ]; then
+            echo "    Hint: HTTP 000 or a timeout means the cluster cannot reach the Socket API"
+            echo "    (egress blocked, DNS failure, or TLS interception). The firewall needs"
+            echo "    outbound HTTPS to {{ $apiUrl }} to fetch package verdicts."
+            fail "Socket API returned HTTP ${code} (expected exactly 401 — an unauthenticated 401 proves egress and TLS work)."
+          fi
+          echo "    OK (HTTP 401 — egress and TLS to the Socket API verified)"
+          {{- if and (eq (include "socket-firewall.metricsExposed" .) "true") ((.Values.redis).enabled) }}
+
+          echo "==> [3] Redis connectivity: GET http://{{ $fullname }}:{{ ((.Values.metrics).port) | default 9145 }}/metrics (expect redis_available 1)"
+          curl -s --max-time 15 -o /tmp/metrics.out "http://{{ $fullname }}:{{ ((.Values.metrics).port) | default 9145 }}/metrics" || fail "could not fetch /metrics from the firewall."
+          if ! grep -q '^redis_available 1' /tmp/metrics.out; then
+            echo "    Hint: redis_available 0 means the firewall cannot reach Redis —"
+            echo "    check the endpoint, TLS settings (redis.ssl / CA cert), and auth"
+            echo "    (redis.password / redis.existingSecret)."
+            fail "metrics do not report 'redis_available 1'."
+          fi
+          echo "    OK (redis_available 1)"
+          {{- end }}
+          {{- if and $pathRouting.enabled $pathRouting.routes }}
+          {{- $firstRoute := first $pathRouting.routes }}
+
+          echo "==> [4] Path routing: GET ${BASE}{{ $firstRoute.path }}/ with Host: {{ $pathRouting.domain }} (expect anything but 404)"
+          code=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' -H "Host: {{ $pathRouting.domain }}" "${BASE}{{ $firstRoute.path }}/") || true
+          if [ "$code" = "404" ]; then
+            echo "    Hint: routing is Host-header based — a 404 means the request did not"
+            echo "    match pathRouting.domain (or allowedDomain) plus a configured route"
+            echo "    path. Verify clients send the same Host the firewall is configured for."
+            fail "route {{ $firstRoute.path }}/ returned 404 for Host {{ $pathRouting.domain }}."
+          fi
+          echo "    OK (HTTP ${code})"
+          {{- end }}
+
+          echo "All checks passed."
