@@ -348,7 +348,9 @@ proxy:
 nginx:
   workerProcesses: 4
   workerConnections: 8192
-  workerRlimitNofile: 2048
+  # Two descriptors per proxied connection (client + upstream), so this must be
+  # >= 2x workerConnections or descriptor exhaustion caps concurrency first.
+  workerRlimitNofile: 16384
   keepalivePoolSize: 64
   typesHashMaxSize: 2048
   clientMaxBodySize: "100M"
