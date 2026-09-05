@@ -57,15 +57,15 @@ output "troubleshooting" {
 
     # ── Test health endpoint from inside container ───────────────────
     # (run from console)
-    curl -sk https://localhost:8443/health
+    curl -s http://localhost:8080/health
 
     # ── Test npm route from inside container ─────────────────────────
     # (run from console)
-    curl -sk https://localhost:8443/npm/lodash | head -c 200
+    curl -s http://localhost:8080/npm/lodash | head -c 200
 
     # ── Check tarball URL rewriting ──────────────────────────────────
     # (run from console) Tarball URLs should use your domain, not the Container App FQDN
-    curl -sk https://localhost:8443/npm/lodash | grep -o '"tarball":"[^"]*"' | head -3
+    curl -s http://localhost:8080/npm/lodash | grep -o '"tarball":"[^"]*"' | head -3
 
   EOT
 }

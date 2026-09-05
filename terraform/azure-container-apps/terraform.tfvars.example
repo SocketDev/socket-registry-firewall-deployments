@@ -20,7 +20,8 @@ environment_name    = "socket-fw"
 #
 # IMPORTANT: If you use Azure Front Door with private link and certificate subject
 # name validation, include ALL hostnames that need to match the cert's SANs.
-# Separate multiple hostnames with spaces:
+# Separate multiple hostnames with spaces. The Container App FQDN is a valid SAN
+# but is not bound as a custom domain (Azure already owns *.azurecontainerapps.io):
 #   domain = "registry.company.com ca-socket-fw.happystone-xxxx.eastus.azurecontainerapps.io"
 domain = "registry.company.com"
 

@@ -142,6 +142,7 @@ The `domain` variable controls the cert SANs (when using the self-signed cert). 
 ```hcl
 domain = "registry.company.com ca-socket-fw.xxxxx.eastus.azurecontainerapps.io"
 ```
+The Container App FQDN (`*.azurecontainerapps.io`) is valid as a SAN so origin host-header checks succeed. Do not expect it to be bound as a custom domain — Azure already owns that name, and the template skips it when creating hostname bindings.
 
 **Tarball URLs point to the Container App FQDN instead of the customer-facing domain**
 The firewall rewrites tarball URLs using the `Host` header it receives. If Front Door's origin host header is set to the Container App FQDN, tarball URLs will use that FQDN, and npm clients will try to download tarballs directly (bypassing Front Door), which fails with ECONNRESET.
@@ -162,7 +163,7 @@ If you destroy and recreate the stack, Azure retains the Key Vault in a soft-del
 
 ## Notes
 
-**Custom domain binding**: When `generate_self_signed_cert = true`, the template automatically registers each hostname in the `domain` variable as a custom domain on the Container App. This is required so the Container Apps ingress accepts requests with those Host headers. Without it, requests from Front Door (or any client using a custom hostname) get a 404 from the ingress layer before reaching nginx.
+**Custom domain binding**: When a certificate PEM is available to Terraform (`generate_self_signed_cert = true`, or `ssl_cert` / `ssl_key` with generation disabled), the template registers each customer hostname in the `domain` variable as a custom domain on the Container App. Platform FQDNs (`*.azurecontainerapps.io`) and `localhost` are omitted from those bindings. This is required so the Container Apps ingress accepts requests with those Host headers. Without it, requests from Front Door (or any client using a custom hostname) get a 404 from the ingress layer before reaching nginx. Key Vault secret IDs alone are not enough to upload the ingress certificate; pass `ssl_cert` and `ssl_key` as well if you need custom-hostname bindings.
 
 Azure Container Apps mounts secrets as files in a shared volume at `/mnt/config/`. The template sets the `CONFIG_FILE` env var so the firewall reads socket.yml from the correct path. SSL certificate paths in the generated `socket.yml` reference `/mnt/config/ssl-cert` and `/mnt/config/ssl-key`.
 
