@@ -19,9 +19,16 @@ variable "environment_name" {
 # ── Socket Firewall ──────────────────────────────────────────────────────────
 
 variable "firewall_image" {
-  description = "Docker image for the Socket Registry Firewall"
+  description = <<-EOT
+    Docker image for the Socket Registry Firewall. Pin an explicit version.
+
+    Container Apps resolves a floating tag once, when it creates the revision,
+    and does not re-resolve it. A `:latest` deployment therefore has no
+    reliable answer to "which version is running", and a later `terraform
+    apply` can silently roll a different build.
+  EOT
   type        = string
-  default     = "socketdev/socket-registry-firewall:latest"
+  default     = "socketdev/socket-registry-firewall:2.4.1"
 }
 
 variable "socket_api_token" {

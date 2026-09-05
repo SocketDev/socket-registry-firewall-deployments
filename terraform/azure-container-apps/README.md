@@ -76,6 +76,16 @@ registries = {
   "repository/npm-remote"  = "https://company.jfrog.io/artifactory/api/npm/npm-remote"
   "repository/pypi-remote" = "https://company.jfrog.io/artifactory/api/pypi/pypi-remote"
 }
+
+# Required whenever a route name is not itself an ecosystem name.
+# Without these, the firewall does not recognize "repository/npm-remote" as an
+# ecosystem and serves the route through a plain streaming proxy, forwarding
+# packages with no inspection. Installs succeed and the deployment looks
+# healthy; the only signal is that no SOCKET_DECISION lines appear in the logs.
+registry_overrides = {
+  "repository/npm-remote"  = "npm"
+  "repository/pypi-remote" = "pypi"
+}
 ```
 
 ```bash
