@@ -42,7 +42,7 @@ locals {
   routes = [for name, upstream in var.registries : {
     path     = "/${name}"
     upstream = upstream
-    registry = name
+    registry = lookup(var.registry_overrides, name, name)
   }]
 
   socket_yml = yamlencode(merge(

@@ -51,6 +51,25 @@ variable "registries" {
   }
 }
 
+variable "registry_overrides" {
+  description = <<-EOT
+    Map of `registries` key to the firewall's ecosystem type, for routes whose
+    path name is not itself a valid ecosystem. Example:
+    { "repository/npm-remote" = "npm", "plugins-gradle" = "maven" }.
+
+    Unlisted routes fall back to using their `registries` key as the ecosystem.
+    A route whose ecosystem the firewall does not recognize is served by a
+    plain streaming proxy with no package inspection, so it passes traffic
+    through unscanned while appearing to work. The only signal is the absence
+    of SOCKET_DECISION lines in the logs. Map any non-ecosystem route name here.
+
+    Valid ecosystems: npm, pypi, nuget, maven, cargo, rubygems, go, conda,
+    openvsx, huggingface.
+  EOT
+  type        = map(string)
+  default     = {}
+}
+
 variable "domain" {
   description = "Hostname for path-based routing (e.g., registry.company.com). Use the FQDN from the first deploy or your custom DNS name."
   type        = string
