@@ -1,6 +1,10 @@
 # Required
 location            = "eastus"
 resource_group_name = "rg-socket-firewall"
+# environment_name also derives the Key Vault name (kv-<environment_name>).
+# Key Vault names are globally unique across Azure and capped at 24 characters,
+# and a deleted vault holds its name for the soft-delete retention window.
+# Pick something org-specific rather than the default.
 environment_name    = "socket-fw"
 
 # Socket API token (set via TF_VAR_socket_api_token env var or -var flag;
@@ -40,6 +44,13 @@ registries = {
 #   "repository/npm-remote" = "https://company.jfrog.io/artifactory/api/npm/npm-remote"
 #   "repository/pypi-remote" = "https://company.jfrog.io/artifactory/api/pypi/pypi-remote"
 # }
+#
+# Any route name that is not itself an ecosystem name MUST be mapped here, or
+# the firewall serves that route as a plain proxy with no package inspection.
+# registry_overrides = {
+#   "repository/npm-remote"  = "npm"
+#   "repository/pypi-remote" = "pypi"
+# }
 
 socket_fail_open = true
 
@@ -75,7 +86,9 @@ redis_enabled = false
 # redis_host     = "<name>.redis.cache.windows.net"
 # redis_port     = 6380
 # redis_password = ""    # Azure Cache access key (set via TF_VAR_redis_password for CI/CD;
-#                        # note it is persisted in Terraform state)
+#                        # note it is persisted in Terraform state).
+#                        # Must be an access key on the default user. Redis 6+
+#                        # ACL username/password pairs are not supported.
 # redis_ssl      = true  # Azure Cache requires TLS on port 6380
 #
 # To keep the password out of Terraform state entirely, create the Key Vault
@@ -83,7 +96,7 @@ redis_enabled = false
 # redis_password_key_vault_secret_id = "https://<vault>.vault.azure.net/secrets/<name>"
 
 # Scaling
-firewall_image = "socketdev/socket-registry-firewall:latest"
+firewall_image = "socketdev/socket-registry-firewall:2.4.1"
 min_replicas   = 2
 max_replicas   = 10
 cpu            = 1.0
