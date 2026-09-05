@@ -6,6 +6,9 @@ Deployment templates for the Socket Registry Firewall.
 
 - `helm/` — Kubernetes Helm chart (migrated from `socketdev-demo/socket-firewall-helm` with full commit history).
 - `cloudformation/` — AWS CloudFormation templates (in progress).
+- `terraform/` — Terraform templates.
+  - `terraform/azure-container-apps/` — Azure Container Apps (migrated from
+    `socketdev-demo/socket-firewall-azure-container-apps` with full commit history).
 
 ## Helm chart publishing
 
