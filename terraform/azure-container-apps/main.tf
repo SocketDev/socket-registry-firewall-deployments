@@ -357,9 +357,19 @@ resource "azurerm_container_app" "firewall" {
   # ── Ingress (internal only) ─────────────────────────────────────────────
 
   ingress {
-    external_enabled = false
-    target_port      = 8443
-    transport        = "http"
+    # On an internal environment (internal_load_balancer_enabled = true),
+    # external_enabled = true scopes ingress to the VNet (portal shows
+    # "Limited to VNet"). Setting it to false scopes ingress to the Container
+    # Apps environment only, which leaves the firewall unreachable from
+    # developer machines, CI runners, jumpboxes, or Front Door.
+    external_enabled = true
+
+    # 8080 is the plaintext listener (see ports.http in socket_yml above).
+    # TLS is terminated by Container Apps ingress, so target_port must match
+    # transport. Pointing "http" transport at 8443 sends cleartext to the
+    # TLS listener: the revision passes its health probes and serves nothing.
+    target_port = 8080
+    transport   = "http"
 
     traffic_weight {
       percentage      = 100
