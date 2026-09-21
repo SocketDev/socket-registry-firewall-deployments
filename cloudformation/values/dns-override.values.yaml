@@ -89,10 +89,12 @@ tls:
   generateSelfSigned: true
 
 # Redis caching backed by the ElastiCache replication group provisioned by
-# the CloudFormation stack. Host is injected at install time (--set redis.host=...).
+# the CloudFormation stack. Endpoints are injected at install time
+# (--set redis.host=... --set redis.readHost=...).
 redis:
   enabled: true
   host: ""                  # set to the ElastiCache primary endpoint by the stack
+  readHost: ""              # set to the ElastiCache reader endpoint by the stack
   port: 6379
   ssl: true                 # ElastiCache transit encryption
   sslVerify: true           # if the image doesn't trust Amazon's CA, mount it or set false

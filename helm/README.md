@@ -124,6 +124,7 @@ registries:
 | `externalRegistryCooldown.enabled` | Publish-date enforcement for ecosystems Socket doesn't natively support | `false` |
 | `externalRegistryCooldown.enablePublicQuery` | Allow public-registry cooldown fallback queries | `false` |
 | `redis.enabled` | Enable Redis caching for API lookups | `false` |
+| `redis.readHost` | Optional Redis read endpoint (read replicas); verdict reads split from writes | `""` |
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
 | **Advanced Config** | | |
@@ -637,6 +638,20 @@ redis:
   existingSecret: redis-credentials
   existingSecretKey: REDIS_PASSWORD
 ```
+
+### Redis read endpoint (read replicas)
+
+Requires firewall `2.7.0` or later. Set `redis.readHost` to your provider's reader endpoint (AWS ElastiCache reader endpoint, GCP Memorystore read endpoint) and verdict reads move to the replicas while every write, the revalidation lock, and the bypass state stay on the primary. Leave it empty and the firewall behaves exactly as a single-endpoint deployment.
+
+```yaml
+redis:
+  enabled: true
+  host: my-cache.abc123.use1.cache.amazonaws.com
+  readHost: my-cache-ro.abc123.use1.cache.amazonaws.com
+  port: 6379
+```
+
+The split only activates when the read endpoint differs from `host` by hostname or effective port. ElastiCache Serverless serves the primary and reader on one hostname (ports 6379/6380), so set `readPort: 6380` there. With TLS enabled, SNI for the read endpoint defaults to `readHost`; override with `readSslServerName` if the certificate requires a different name. Cluster-protocol endpoints (ElastiCache cluster-mode-enabled, MemoryDB `clustercfg`) are not supported as either endpoint.
 
 ### Redis TLS
 
