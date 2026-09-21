@@ -496,6 +496,15 @@ redis:
   enabled: false
   host: redis
   port: 6379
+  # Optional read endpoint (Redis read replicas), firewall >= 2.7.0. Verdict reads
+  # go here; writes, locks and the bypass state always go to `host`. The split only
+  # activates when the read endpoint differs from `host` by hostname or effective
+  # port. Leave empty for single-endpoint behavior. Cluster-protocol endpoints
+  # (cluster-mode-enabled, MemoryDB clustercfg) are not supported.
+  readHost: ""
+  # Read endpoint port. Empty defaults to `port`. (ElastiCache Serverless serves
+  # primary and reader on one hostname, ports 6379/6380 — set 6380 here.)
+  readPort: ""
   password: ""
   # Name of existing secret containing Redis password
   existingSecret: ""
@@ -508,6 +517,9 @@ redis:
   sslVerify: true
   # TLS SNI server name presented to the Redis server (managed services may require this).
   sslServerName: ""
+  # TLS SNI server name presented to the read endpoint. Empty defaults to
+  # readHost (never sslServerName).
+  readSslServerName: ""
   # File path inside the container for the Redis CA certificate.
   # Use sslCaCertExistingSecret below to have the chart mount a secret
   # for you. Set sslCaCert directly only if you are delivering the file

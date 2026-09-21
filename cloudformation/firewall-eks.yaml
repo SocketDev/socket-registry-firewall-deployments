@@ -54,7 +54,7 @@ Parameters:
 
   ChartVersion:
     Type: String
-    Default: "0.11.6"
+    Default: "0.12.0"
     Description: Socket Firewall Helm chart version to install.
 
   FirewallImageTag:
@@ -153,6 +153,10 @@ Outputs:
     Description: ElastiCache primary endpoint (feed into helm redis.host).
     Value: !GetAtt RedisReplicationGroup.PrimaryEndPoint.Address
 
+  RedisReaderEndpoint:
+    Description: ElastiCache reader endpoint (feed into helm redis.readHost).
+    Value: !GetAtt RedisReplicationGroup.ReaderEndPoint.Address
+
   SocketApiTokenSecretArn:
     Description: Secrets Manager ARN holding the Socket API token.
     Value: !Ref SocketApiTokenSecret
@@ -176,4 +180,5 @@ Outputs:
         -f cloudformation/values/dns-override.values.yaml
         --set image.tag=${FirewallImageTag}
         --set redis.host=${RedisReplicationGroup.PrimaryEndPoint.Address}
+        --set redis.readHost=${RedisReplicationGroup.ReaderEndPoint.Address}
         --set socket.apiToken="$(aws secretsmanager get-secret-value --secret-id ${SocketApiTokenSecret} --query SecretString --output text)"

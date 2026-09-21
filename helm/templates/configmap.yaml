@@ -614,6 +614,12 @@ data:
       enabled: true
       host: {{ .Values.redis.host }}
       port: {{ .Values.redis.port }}
+      {{- if .Values.redis.readHost }}
+      read_host: {{ .Values.redis.readHost }}
+      {{- if .Values.redis.readPort }}
+      read_port: {{ .Values.redis.readPort }}
+      {{- end }}
+      {{- end }}
       db: {{ .Values.redis.db }}
       timeout: {{ .Values.redis.timeout }}
       pool_size: {{ .Values.redis.poolSize }}
@@ -623,6 +629,9 @@ data:
       ssl_verify: {{ .Values.redis.sslVerify }}
       {{- if .Values.redis.sslServerName }}
       ssl_server_name: {{ .Values.redis.sslServerName | quote }}
+      {{- end }}
+      {{- if and .Values.redis.readHost .Values.redis.readSslServerName }}
+      read_ssl_server_name: {{ .Values.redis.readSslServerName | quote }}
       {{- end }}
       {{- if .Values.redis.sslCaCertExistingSecret }}
       ssl_ca_cert: /etc/nginx/redis-tls/ca/ca.crt
