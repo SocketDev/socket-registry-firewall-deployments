@@ -97,9 +97,11 @@ socket:
   noProxy: ""
   # Named deployment/config in the Socket dashboard (used with useRemoteConfig / cooldown api mode).
   deployment: ""
-  # Client auth gate — HTTP basic auth. Rendered into the ConfigMap (not a Secret).
+  # Client auth gate (HTTP basic auth). The username goes in the ConfigMap.
   basicAuthUsername: ""
-  basicAuthPassword: ""
+  basicAuthPassword: ""             # stored in a Secret (SOCKET_BASIC_AUTH_PASSWORD)
+  basicAuthExistingSecret: ""       # instead of basicAuthPassword
+  basicAuthExistingSecretKey: "SOCKET_BASIC_AUTH_PASSWORD"
   # Token guarding the authenticated health endpoint. Empty leaves it unauthenticated
   # (falls back to the SOCKET_HEALTH_API_TOKEN env var).
   healthApiToken: ""
@@ -228,11 +230,11 @@ pathRouting:
     type: ""                    # 'nexus' or 'artifactory'
     apiUrl: ""
     apiKey: ""                  # stored in a Secret (PRIVATE_REGISTRY_KEY)
-    existingSecret: ""          # instead of apiKey
+    existingSecret: ""          # instead of apiKey/password; read as the password when username is set
     existingSecretKey: "PRIVATE_REGISTRY_KEY"
-    # username/password go in the ConfigMap; prefer apiKey
-    username: ""
-    password: ""
+    existingSecretPasswordKey: "PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD"
+    username: ""                # goes in the ConfigMap
+    password: ""                # stored in a Secret (PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD)
     interval: "5m"
     includePattern: ".*"
     excludePattern: "^$"

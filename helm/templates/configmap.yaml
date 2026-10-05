@@ -38,9 +38,6 @@ data:
       {{- if .Values.socket.basicAuthUsername }}
       basic_auth_username: {{ .Values.socket.basicAuthUsername | quote }}
       {{- end }}
-      {{- if .Values.socket.basicAuthPassword }}
-      basic_auth_password: {{ .Values.socket.basicAuthPassword | quote }}
-      {{- end }}
       {{- if .Values.socket.healthApiToken }}
       health_api_token: {{ .Values.socket.healthApiToken | quote }}
       {{- end }}
@@ -288,9 +285,6 @@ data:
         {{- end }}
         {{- if .Values.pathRouting.privateRegistry.username }}
         username: {{ .Values.pathRouting.privateRegistry.username | quote }}
-        {{- end }}
-        {{- if .Values.pathRouting.privateRegistry.password }}
-        password: {{ .Values.pathRouting.privateRegistry.password | quote }}
         {{- end }}
         {{- if .Values.pathRouting.privateRegistry.interval }}
         interval: {{ .Values.pathRouting.privateRegistry.interval | quote }}

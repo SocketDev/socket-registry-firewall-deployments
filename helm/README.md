@@ -130,7 +130,11 @@ registries:
 | `webhook.authHeader` | Auth header sent to the webhook; stored in a chart-created Secret | `""` |
 | `webhook.existingSecret` / `existingSecretKey` | Existing secret holding the auth header (instead of `webhook.authHeader`) | `""` / `WEBHOOK_AUTH_HEADER` |
 | `pathRouting.privateRegistry.apiKey` | Private registry API key; stored in a chart-created Secret | `""` |
+| `pathRouting.privateRegistry.password` | Private registry password (used with `username`); stored in a chart-created Secret | `""` |
 | `pathRouting.privateRegistry.existingSecret` / `existingSecretKey` | Existing secret holding the API key (instead of `apiKey`) | `""` / `PRIVATE_REGISTRY_KEY` |
+| `pathRouting.privateRegistry.existingSecretPasswordKey` | Key in `existingSecret` holding the password; read instead of the API key when `username` is set | `PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD` |
+| `socket.basicAuthPassword` | Client basic auth password; stored in a chart-created Secret | `""` |
+| `socket.basicAuthExistingSecret` / `basicAuthExistingSecretKey` | Existing secret holding the basic auth password (instead of `basicAuthPassword`) | `""` / `SOCKET_BASIC_AUTH_PASSWORD` |
 | **Advanced Config** | | |
 | `ports.disableHttp` / `ports.disableHttps` | Disable a listener entirely | `false` |
 | `ssl.caCert` | CA trust bundle (file path) merged into the server trust store | `""` |

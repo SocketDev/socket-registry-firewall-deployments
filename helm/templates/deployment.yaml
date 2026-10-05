@@ -15,6 +15,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- if and (eq (include "socket-firewall.metricsExposed" .) "true") .Values.metrics.podAnnotations }}
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.metrics.port | quote }}
@@ -269,13 +270,31 @@ spec:
                   name: {{ .Values.webhook.existingSecret | default (printf "%s-webhook" (include "socket-firewall.fullname" .)) }}
                   key: {{ .Values.webhook.existingSecretKey }}
             {{- end }}
-            {{- with .Values.pathRouting }}
-            {{- if and .enabled .privateRegistry.enabled (or .privateRegistry.apiKey .privateRegistry.existingSecret) }}
+            {{- if or .Values.socket.basicAuthPassword .Values.socket.basicAuthExistingSecret }}
+            - name: SOCKET_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.socket.basicAuthExistingSecret | default (printf "%s-basic-auth" (include "socket-firewall.fullname" .)) }}
+                  key: {{ .Values.socket.basicAuthExistingSecretKey }}
+            {{- end }}
+            {{- with .Values.pathRouting.privateRegistry }}
+            {{- if and $.Values.pathRouting.enabled .enabled }}
+            {{- $prSecret := .existingSecret | default (printf "%s-private-registry" (include "socket-firewall.fullname" $)) }}
+            {{- /* existingSecret: username set means basic auth (password key), otherwise the API key */}}
+            {{- if or .apiKey (and .existingSecret (not .username)) }}
             - name: PRIVATE_REGISTRY_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .privateRegistry.existingSecret | default (printf "%s-private-registry" (include "socket-firewall.fullname" $)) }}
-                  key: {{ .privateRegistry.existingSecretKey }}
+                  name: {{ $prSecret }}
+                  key: {{ .existingSecretKey }}
+            {{- end }}
+            {{- if or .password (and .existingSecret .username) }}
+            - name: PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $prSecret }}
+                  key: {{ .existingSecretPasswordKey }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- $pathBased   := .Values.pathRouting.enabled -}}
