@@ -227,7 +227,10 @@ pathRouting:
     enabled: false
     type: ""                    # 'nexus' or 'artifactory'
     apiUrl: ""
-    apiKey: ""                  # also overridable via PRIVATE_REGISTRY_KEY env var
+    apiKey: ""                  # stored in a Secret (PRIVATE_REGISTRY_KEY)
+    existingSecret: ""          # instead of apiKey
+    existingSecretKey: "PRIVATE_REGISTRY_KEY"
+    # username/password go in the ConfigMap; prefer apiKey
     username: ""
     password: ""
     interval: "5m"
@@ -556,7 +559,9 @@ webhook:
   enabled: false
   url: ""
   # Auth header sent to the webhook endpoint (e.g. "Authorization: Bearer <token>")
-  authHeader: ""
+  authHeader: ""  # stored in a Secret (WEBHOOK_AUTH_HEADER)
+  existingSecret: ""  # instead of authHeader
+  existingSecretKey: "WEBHOOK_AUTH_HEADER"
   sslVerify: true
   timeout: 5000
   onBlock: true
@@ -707,7 +712,9 @@ tls:
   generateSelfSigned: true
   # Use existing secret with tls.crt and tls.key
   existingSecret: ""
-  # Set to true when using cert-manager (remaps tls.crt/tls.key to fullchain.pem/privkey.pem)
+  # false: mount a secret keyed fullchain.pem/privkey.pem as-is
+  remapKeys: true
+  # Set to true when using cert-manager (enables includeCaCrt)
   certManager: false
   # When certManager is true, also project ca.crt from the secret to /etc/nginx/ssl/ca.crt.
   # Set to false for ACME issuers like Let's Encrypt that don't populate a separate ca.crt
@@ -822,12 +829,15 @@ initContainers:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       runAsNonRoot: true
-      runAsUser: 1000
+      runAsUser: 1001  # firewall image UID; it reads the key
       capabilities:
         drop:
           - ALL
       seccompProfile:
         type: RuntimeDefault
+
+# DNS domain for bare redis.host names
+clusterDomain: cluster.local
 
 # Service account
 serviceAccount:

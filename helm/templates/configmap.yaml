@@ -286,9 +286,6 @@ data:
         {{- if .Values.pathRouting.privateRegistry.apiUrl }}
         api_url: {{ .Values.pathRouting.privateRegistry.apiUrl | quote }}
         {{- end }}
-        {{- if .Values.pathRouting.privateRegistry.apiKey }}
-        api_key: {{ .Values.pathRouting.privateRegistry.apiKey | quote }}
-        {{- end }}
         {{- if .Values.pathRouting.privateRegistry.username }}
         username: {{ .Values.pathRouting.privateRegistry.username | quote }}
         {{- end }}
@@ -612,7 +609,7 @@ data:
     {{- if .Values.redis.enabled }}
     redis:
       enabled: true
-      host: {{ .Values.redis.host }}
+      host: {{ include "socket-firewall.redisHost" . }}
       port: {{ .Values.redis.port }}
       db: {{ .Values.redis.db }}
       timeout: {{ .Values.redis.timeout }}
@@ -660,7 +657,6 @@ data:
     webhook:
       enabled: true
       url: {{ .Values.webhook.url }}
-      auth_header: {{ .Values.webhook.authHeader | quote }}
       ssl_verify: {{ .Values.webhook.sslVerify }}
       timeout: {{ .Values.webhook.timeout }}
       on_block: {{ .Values.webhook.onBlock }}
