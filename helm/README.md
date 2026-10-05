@@ -124,21 +124,32 @@ registries:
 | `externalRegistryCooldown.enabled` | Publish-date enforcement for ecosystems Socket doesn't natively support | `false` |
 | `externalRegistryCooldown.enablePublicQuery` | Allow public-registry cooldown fallback queries | `false` |
 | `redis.enabled` | Enable Redis caching for API lookups | `false` |
+| `redis.host` | Redis host. A bare Service name is qualified to `<host>.<release namespace>.svc.<clusterDomain>` | `redis` |
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
+| `webhook.authHeader` | Auth header sent to the webhook; stored in a chart-created Secret | `""` |
+| `webhook.existingSecret` / `existingSecretKey` | Existing secret holding the auth header (instead of `webhook.authHeader`) | `""` / `WEBHOOK_AUTH_HEADER` |
+| `pathRouting.privateRegistry.apiKey` | Private registry API key; stored in a chart-created Secret | `""` |
+| `pathRouting.privateRegistry.password` | Private registry password (used with `username`); stored in a chart-created Secret | `""` |
+| `pathRouting.privateRegistry.existingSecret` / `existingSecretKey` | Existing secret holding the API key (instead of `apiKey`) | `""` / `PRIVATE_REGISTRY_KEY` |
+| `pathRouting.privateRegistry.existingSecretPasswordKey` | Key in `existingSecret` holding the password; read instead of the API key when `username` is set | `PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD` |
+| `socket.basicAuthPassword` | Client basic auth password; stored in a chart-created Secret | `""` |
+| `socket.basicAuthExistingSecret` / `basicAuthExistingSecretKey` | Existing secret holding the basic auth password (instead of `basicAuthPassword`) | `""` / `SOCKET_BASIC_AUTH_PASSWORD` |
 | **Advanced Config** | | |
 | `ports.disableHttp` / `ports.disableHttps` | Disable a listener entirely | `false` |
 | `ssl.caCert` | CA trust bundle (file path) merged into the server trust store | `""` |
 | `extraConfig` | Raw `socket.yml` passthrough (arbitrary/new top-level sections) | `{}` |
 | **Infrastructure** | | |
 | `tls.generateSelfSigned` | Generate self-signed certs | `true` |
-| `tls.existingSecret` | Use existing TLS secret | `""` |
+| `tls.existingSecret` | Existing TLS secret with `tls.crt` and `tls.key` | `""` |
+| `tls.remapKeys` | Mount `tls.crt`/`tls.key` as `fullchain.pem`/`privkey.pem`; `false` mounts a secret already keyed that way as-is | `true` |
+| `clusterDomain` | Cluster DNS domain, used to qualify a bare `redis.host` and the self-signed certificate's Service names | `cluster.local` |
 | `service.type` | Service type | `ClusterIP` |
 | `service.externalTrafficPolicy` | `Cluster` or `Local` (NodePort/LoadBalancer only); use `Local` to preserve client source IPs | `""` |
 | `ingress.enabled` | Enable Ingress | `false` |
 | `ingress.className` | Ingress class (nginx, alb, traefik) | `""` |
 | `autoscaling.enabled` | Enable HorizontalPodAutoscaler | `false` |
-| `podDisruptionBudget.enabled` | Keep pods available during node maintenance | `true` |
+| `podDisruptionBudget.enabled` | Keep pods available during node maintenance. Rendered only when at least two replicas always run (`replicaCount` > 1, or `autoscaling.minReplicas` > 1), so single-replica installs never block node drains | `true` |
 | `topologySpreadConstraints` | Evenly spread replicas across zones/nodes | `[]` |
 | `extraContainers` | Sidecar containers (auth proxies, log collectors) | `[]` |
 | `resources.limits.cpu` | CPU limit | `4` |
@@ -169,7 +180,7 @@ registries:
 | **Security** | | |
 | `securityContext` | Container security context | PSS restricted (see values.yaml) |
 | `podSecurityContext` | Pod-level security context | `{}` |
-| `initContainers.copyApp.securityContext` | copy-app init container security context | PSS restricted |
+| `initContainers.copyApp.securityContext` | copy-app and wait-for-redis init container security context | PSS restricted |
 | `initContainers.certGenerator.securityContext` | generate-certs init container security context | PSS restricted |
 
 See [values.yaml](values.yaml) for all options.
@@ -509,7 +520,9 @@ example.
 
 ### Self-Signed (Default)
 
-The chart generates self-signed certificates automatically. Extract the CA cert:
+The chart generates self-signed certificates automatically. The certificate covers the
+Service names (`<release>-socket-firewall`, `.<namespace>.svc`, `.<namespace>.svc.<clusterDomain>`)
+plus every configured domain. Extract the CA cert:
 
 ```bash
 POD=$(kubectl get pod -l app.kubernetes.io/name=socket-firewall -o jsonpath='{.items[0].metadata.name}')
@@ -524,6 +537,11 @@ tls:
   existingSecret: my-tls-secret  # must contain tls.crt and tls.key
 ```
 
+Create the secret with `kubectl create secret tls my-tls-secret --cert=fullchain.pem --key=privkey.pem`.
+The chart mounts `tls.crt` as `fullchain.pem` and `tls.key` as `privkey.pem`, the filenames
+nginx expects. For a secret already keyed `fullchain.pem`/`privkey.pem`, set
+`tls.remapKeys: false` to mount it as-is.
+
 ### cert-manager
 
 Create a Certificate resource and reference the secret:
@@ -535,10 +553,7 @@ tls:
   certManager: true
 ```
 
-`certManager: true` remaps `tls.crt` to `fullchain.pem` and `tls.key` to `privkey.pem`,
-which are the filenames nginx expects.
-
-By default the chart also projects `ca.crt` from the secret. ACME issuers like Let's
+With `certManager: true` the chart also projects `ca.crt` from the secret. ACME issuers like Let's
 Encrypt don't populate `ca.crt` (the chain is in `tls.crt`), so set `includeCaCrt: false`
 to skip it:
 
@@ -637,6 +652,14 @@ redis:
   existingSecret: redis-credentials
   existingSecretKey: REDIS_PASSWORD
 ```
+
+nginx's resolver ignores the pod's DNS search domains, so a bare Service name such as
+`redis` is rendered as `redis.<release namespace>.svc.<clusterDomain>`. Use a fully
+qualified name for Redis in another namespace or outside the cluster.
+
+A `wait-for-redis` init container holds the pod in `Init` until `redis.host:redis.port`
+accepts TCP connections, so a wrong host shows up as a stuck rollout
+(`kubectl logs <pod> -c wait-for-redis`) instead of a Ready pod running without Redis.
 
 ### Redis TLS
 
@@ -828,7 +851,7 @@ To relax security for non-PSS clusters:
 securityContext: {}
 initContainers:
   copyApp:
-    securityContext: {}
+    securityContext: {}   # also applies to wait-for-redis
   certGenerator:
     securityContext: {}
 ```

@@ -15,6 +15,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- if and (eq (include "socket-firewall.metricsExposed" .) "true") .Values.metrics.podAnnotations }}
         prometheus.io/scrape: "true"
         prometheus.io/port: {{ .Values.metrics.port | quote }}
@@ -38,7 +39,20 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # Service env vars (REDIS_PORT=tcp://...) crash startup
+      enableServiceLinks: false
       initContainers:
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: "{{ include "socket-firewall.image" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.initContainers.copyApp.securityContext | nindent 12 }}
+          {{- $redis := printf "%s/%v" (include "socket-firewall.redisHost" .) .Values.redis.port }}
+          command: [bash, -c]
+          args:
+            - until timeout 5 bash -c 'exec 3<>/dev/tcp/{{ $redis }}' 2>/dev/null; do echo "Waiting for {{ $redis }}"; sleep 2; done
+        {{- end }}
         - name: copy-app
           image: "{{ include "socket-firewall.image" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -62,10 +76,11 @@ spec:
             - /bin/sh
             - -c
             - |
-              # Generate self-signed certificate for all configured domains
-              DOMAINS=""
+              set -e
+              {{- $svc := include "socket-firewall.fullname" . }}
+              DOMAINS="DNS:{{ $svc }},DNS:{{ $svc }}.{{ .Release.Namespace }}.svc,DNS:{{ $svc }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}"
               {{- if .Values.pathRouting.enabled }}
-              DOMAINS="DNS:{{ .Values.pathRouting.domain }}"
+              DOMAINS="$DOMAINS,DNS:{{ .Values.pathRouting.domain }}"
               {{- else }}
               {{- if .Values.registries.npm.enabled }}
               {{- range .Values.registries.npm.domains }}
@@ -248,6 +263,40 @@ spec:
                   name: {{ include "socket-firewall.splunkSecretName" . }}
                   key: {{ .Values.splunk.existingSecretKey }}
             {{- end }}
+            {{- if and .Values.webhook.enabled (or .Values.webhook.authHeader .Values.webhook.existingSecret) }}
+            - name: WEBHOOK_AUTH_HEADER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.webhook.existingSecret | default (printf "%s-webhook" (include "socket-firewall.fullname" .)) }}
+                  key: {{ .Values.webhook.existingSecretKey }}
+            {{- end }}
+            {{- if or .Values.socket.basicAuthPassword .Values.socket.basicAuthExistingSecret }}
+            - name: SOCKET_BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.socket.basicAuthExistingSecret | default (printf "%s-basic-auth" (include "socket-firewall.fullname" .)) }}
+                  key: {{ .Values.socket.basicAuthExistingSecretKey }}
+            {{- end }}
+            {{- with .Values.pathRouting.privateRegistry }}
+            {{- if and $.Values.pathRouting.enabled .enabled }}
+            {{- $prSecret := .existingSecret | default (printf "%s-private-registry" (include "socket-firewall.fullname" $)) }}
+            {{- /* existingSecret: username set means basic auth (password key), otherwise the API key */}}
+            {{- if or .apiKey (and .existingSecret (not .username)) }}
+            - name: PRIVATE_REGISTRY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $prSecret }}
+                  key: {{ .existingSecretKey }}
+            {{- end }}
+            {{- if or .password (and .existingSecret .username) }}
+            - name: PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $prSecret }}
+                  key: {{ .existingSecretPasswordKey }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
             {{- $pathBased   := .Values.pathRouting.enabled -}}
             {{- $domainBased := and (not .Values.pathRouting.enabled) (not .Values.dnsRouting.enabled) -}}
             {{- if $pathBased }}
@@ -336,23 +385,20 @@ spec:
         - name: tls-certs
           {{- if .Values.tls.generateSelfSigned }}
           emptyDir: {}
-          {{- else if .Values.tls.existingSecret }}
+          {{- else }}
           secret:
-            secretName: {{ .Values.tls.existingSecret }}
-            {{- if .Values.tls.certManager }}
+            secretName: {{ include "socket-firewall.tlsSecretName" . }}
+            {{- if .Values.tls.remapKeys }}
             items:
               - key: tls.crt
                 path: fullchain.pem
               - key: tls.key
                 path: privkey.pem
-              {{- if .Values.tls.includeCaCrt }}
+              {{- if and .Values.tls.certManager .Values.tls.includeCaCrt }}
               - key: ca.crt
                 path: ca.crt
               {{- end }}
             {{- end }}
-          {{- else }}
-          secret:
-            secretName: {{ include "socket-firewall.tlsSecretName" . }}
           {{- end }}
         {{- if and .Values.redis.enabled .Values.redis.ssl .Values.redis.sslCaCertExistingSecret }}
         - name: redis-tls-ca

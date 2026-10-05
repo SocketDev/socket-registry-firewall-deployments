@@ -97,9 +97,11 @@ socket:
   noProxy: ""
   # Named deployment/config in the Socket dashboard (used with useRemoteConfig / cooldown api mode).
   deployment: ""
-  # Client auth gate — HTTP basic auth. Rendered into the ConfigMap (not a Secret).
+  # Client auth gate (HTTP basic auth). The username goes in the ConfigMap.
   basicAuthUsername: ""
-  basicAuthPassword: ""
+  basicAuthPassword: ""             # stored in a Secret (SOCKET_BASIC_AUTH_PASSWORD)
+  basicAuthExistingSecret: ""       # instead of basicAuthPassword
+  basicAuthExistingSecretKey: "SOCKET_BASIC_AUTH_PASSWORD"
   # Token guarding the authenticated health endpoint. Empty leaves it unauthenticated
   # (falls back to the SOCKET_HEALTH_API_TOKEN env var).
   healthApiToken: ""
@@ -227,9 +229,12 @@ pathRouting:
     enabled: false
     type: ""                    # 'nexus' or 'artifactory'
     apiUrl: ""
-    apiKey: ""                  # also overridable via PRIVATE_REGISTRY_KEY env var
-    username: ""
-    password: ""
+    apiKey: ""                  # stored in a Secret (PRIVATE_REGISTRY_KEY)
+    existingSecret: ""          # instead of apiKey/password; read as the password when username is set
+    existingSecretKey: "PRIVATE_REGISTRY_KEY"
+    existingSecretPasswordKey: "PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD"
+    username: ""                # goes in the ConfigMap
+    password: ""                # stored in a Secret (PATH_ROUTING_PRIVATE_REGISTRY_PASSWORD)
     interval: "5m"
     includePattern: ".*"
     excludePattern: "^$"
@@ -556,7 +561,9 @@ webhook:
   enabled: false
   url: ""
   # Auth header sent to the webhook endpoint (e.g. "Authorization: Bearer <token>")
-  authHeader: ""
+  authHeader: ""  # stored in a Secret (WEBHOOK_AUTH_HEADER)
+  existingSecret: ""  # instead of authHeader
+  existingSecretKey: "WEBHOOK_AUTH_HEADER"
   sslVerify: true
   timeout: 5000
   onBlock: true
@@ -707,7 +714,9 @@ tls:
   generateSelfSigned: true
   # Use existing secret with tls.crt and tls.key
   existingSecret: ""
-  # Set to true when using cert-manager (remaps tls.crt/tls.key to fullchain.pem/privkey.pem)
+  # false: mount a secret keyed fullchain.pem/privkey.pem as-is
+  remapKeys: true
+  # Set to true when using cert-manager (enables includeCaCrt)
   certManager: false
   # When certManager is true, also project ca.crt from the secret to /etc/nginx/ssl/ca.crt.
   # Set to false for ACME issuers like Let's Encrypt that don't populate a separate ca.crt
@@ -822,12 +831,15 @@ initContainers:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       runAsNonRoot: true
-      runAsUser: 1000
+      runAsUser: 1001  # firewall image UID; it reads the key
       capabilities:
         drop:
           - ALL
       seccompProfile:
         type: RuntimeDefault
+
+# DNS domain for bare redis.host names
+clusterDomain: cluster.local
 
 # Service account
 serviceAccount:

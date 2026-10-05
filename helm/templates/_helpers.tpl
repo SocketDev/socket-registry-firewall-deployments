@@ -122,6 +122,16 @@ Splunk secret name
 {{- end }}
 {{- end }}
 
+{{/* nginx's resolver ignores search domains: qualify a bare Redis Service name */}}
+{{- define "socket-firewall.redisHost" -}}
+{{- $host := .Values.redis.host -}}
+{{- if or (contains "." $host) (contains ":" $host) -}}
+{{- $host -}}
+{{- else -}}
+{{- printf "%s.%s.svc.%s" $host .Release.Namespace .Values.clusterDomain -}}
+{{- end -}}
+{{- end }}
+
 {{/*
 Bearer token secret name (client auth gate)
 */}}
