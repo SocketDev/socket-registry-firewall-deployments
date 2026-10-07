@@ -1,0 +1,49 @@
+name: Chart checks
+
+# Gates every PR so a published chart version never changes content and never
+# points at an image the registry cannot serve.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 2           # HEAD is the PR merge commit; HEAD^1 is the base branch tip
+          persist-credentials: false
+
+      - name: Chart version changes with the chart
+        run: |
+          set -euo pipefail
+          version=$(yq '.version' helm/Chart.yaml)
+          if ! git diff --quiet HEAD^1 HEAD -- helm && [ "$version" = "$(git show HEAD^1:helm/Chart.yaml | yq '.version')" ]; then
+            echo "::error file=helm/Chart.yaml::helm/ changed but the chart version is still $version. Published versions are immutable; bump version."
+            exit 1
+          fi
+
+      - name: image.tag matches appVersion
+        run: |
+          set -euo pipefail
+          app=$(yq '.appVersion' helm/Chart.yaml)
+          tag=$(yq '.image.tag' helm/values.yaml)
+          if [ -n "$tag" ] && [ "$tag" != "$app" ]; then
+            echo "::error file=helm/values.yaml::image.tag $tag differs from Chart.yaml appVersion $app."
+            exit 1
+          fi
+
+      - name: Image exists in the registry
+        run: |
+          set -euo pipefail
+          image="$(yq '.image.repository' helm/values.yaml):$(yq '.appVersion' helm/Chart.yaml)"
+          if ! docker manifest inspect "$image" > /dev/null; then
+            echo "::error file=helm/Chart.yaml::$image does not resolve in the registry."
+            exit 1
+          fi

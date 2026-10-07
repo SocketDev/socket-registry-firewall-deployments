@@ -9,8 +9,8 @@ name: Release Chart
 on:
   push:
     branches: [main]
-    paths: ['helm/Chart.yaml', 'helm/README.md']   # fires on a chart version bump or chart-README change
-  workflow_dispatch: {}          # manual re-publish of the current version
+    paths: ['helm/**']           # any chart change; an unbumped version fails the publish below
+  workflow_dispatch: {}          # manual publish of the current version; fails if already published
 
 permissions:
   contents: read                 # we never write to THIS repo; the old repo is reached via SSH key
@@ -31,6 +31,9 @@ jobs:
       - name: Package chart
         run: helm package helm --destination .deploy
 
+      - name: Check the image exists
+        run: docker manifest inspect "$(yq '.image.repository' helm/values.yaml):$(yq '.appVersion' helm/Chart.yaml)" > /dev/null
+
       - name: Configure deploy key
         run: |
           mkdir -p ~/.ssh
@@ -45,7 +48,13 @@ jobs:
           set -euo pipefail
           git clone --branch gh-pages --single-branch \
             git@github.com:socketdev-demo/socket-firewall-helm.git pages
-          cp .deploy/*.tgz pages/
+          tgz=$(basename .deploy/*.tgz)
+          # Published chart versions are immutable: never overwrite a tarball.
+          if [ -e "pages/$tgz" ]; then
+            echo "::error::$tgz is already published. Bump version in helm/Chart.yaml."
+            exit 1
+          fi
+          cp ".deploy/$tgz" pages/
           # Keep the gh-pages landing page in sync with the chart README so the
           # published values table never drifts from the chart (CE-238). The
           # landing page renders README.md as its index.

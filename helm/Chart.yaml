@@ -2,9 +2,10 @@ apiVersion: v2
 name: socket-firewall
 description: Socket.dev Registry Firewall - Block vulnerable packages before they reach your cluster
 type: application
-version: 0.11.8
-# appVersion is the single source of truth for the firewall image version.
-# image.tag in values.yaml defaults to this (see templates/_helpers.tpl).
+version: 0.11.9
+# appVersion is the firewall image version. image.tag in values.yaml must equal
+# it or be empty (empty falls back to it, see templates/_helpers.tpl); the Chart
+# checks workflow fails a PR where they differ.
 appVersion: "2.9.10"
 keywords:
   - security
