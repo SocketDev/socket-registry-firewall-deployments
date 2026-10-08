@@ -39,6 +39,37 @@ jobs:
             exit 1
           fi
 
+      - name: Release bot pins match Chart.yaml
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          from pathlib import Path
+
+          chart_text = Path('helm/Chart.yaml').read_text()
+          chart = re.search(r'^version: ([0-9.]+)$', chart_text, re.M)[1]
+          image = re.search(r'^appVersion: "([0-9.]+)"$', chart_text, re.M)[1]
+          image_tag = r'^image:\n(?:[ \t]+[^\n]*\n)*?[ \t]+tag: "([^"\n]*)"$'
+          def parameter(name):
+              return rf'^  {name}:\n(?:[ \t]{{4,}}[^\n]*\n)*?[ \t]{{4,}}Default: "([^"\n]*)"$'
+          pins = [
+              ('helm/values.yaml', image_tag, image),
+              ('cloudformation/firewall-eks.yaml', parameter('ChartVersion'), chart),
+              ('cloudformation/firewall-eks.yaml', parameter('FirewallImageTag'), image),
+              ('cloudformation/values/dns-override.values.yaml', image_tag, image),
+              ('helm/README.md', r'^\| `image\.tag` \|[^\n]*?\| `"([^"`\n]*)"` \|$', image),
+              ('cloudformation/README.md', r'Chart version defaults to `([^`\n]*)`', chart),
+              ('cloudformation/README.md', r'image pinned to `([^`\n]*)`', image),
+              ('cloudformation/README.md', r'`image\.tag`, default `([^`\n]*)`', image),
+          ]
+          failed = False
+          for name, pattern, want in pins:
+              found = re.findall(pattern, Path(name).read_text(), re.M)
+              if found != [want]:
+                  print(f'::error file={name}::expected one pin equal to {want}, found {found}. The firewall release bot exits when this pin differs from helm/Chart.yaml.')
+                  failed = True
+          sys.exit(failed)
+          EOF
+
       - name: Image exists in the registry
         run: |
           set -euo pipefail
