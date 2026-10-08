@@ -1,0 +1,42 @@
+name: Chart drift
+
+# Alerts Slack when the newest stable firewall image has been on Docker Hub for
+# MAX_AGE_HOURS and the newest published chart still ships an older appVersion.
+# The run also fails, so drift shows up in the Actions tab.
+
+on:
+  schedule:
+    - cron: '0 14 * * *'         # daily, 14:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    environment: alerts   # scope the Slack webhook secret behind a GitHub Environment (zizmor secrets-outside-env)
+    steps:
+      - name: Compare newest image with published appVersion
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_HELM_DRIFT_WEBHOOK_URL }}
+          MAX_AGE_HOURS: 72      # leaves time to review and merge the release bot's bump PR
+        run: |
+          set -euo pipefail
+          tags=$(curl -fsS 'https://hub.docker.com/v2/repositories/socketdev/socket-registry-firewall/tags?page_size=100&ordering=last_updated')
+          newest=$(jq -c '[.results[] | select(.name | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | max_by(.name | split(".") | map(tonumber))' <<<"$tags")
+          image=$(jq -r '.name' <<<"$newest")
+          age=$(jq -r '(now - (.tag_last_pushed | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)) / 3600 | floor' <<<"$newest")
+          app=$(curl -fsS https://socketdev-demo.github.io/socket-firewall-helm/index.yaml | yq '.entries["socket-firewall"][0].appVersion')
+          echo "Newest image $image, pushed ${age}h ago. Published chart appVersion $app."
+          if [ "$image" = "$app" ] || [ "$age" -lt "$MAX_AGE_HOURS" ]; then
+            exit 0
+          fi
+          msg="Helm chart drift: the published socket-firewall chart ships appVersion $app, but image $image has been on Docker Hub for ${age}h. Merge the release bot's bump PR: https://github.com/${GITHUB_REPOSITORY}/pulls"
+          echo "::error::$msg"
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::error::SLACK_HELM_DRIFT_WEBHOOK_URL is not set in the alerts environment; no Slack alert sent."
+            exit 1
+          fi
+          jq -n --arg text "$msg" '{text: $text}' | curl -fsS -H 'Content-Type: application/json' --data-binary @- "$SLACK_WEBHOOK_URL"
+          exit 1

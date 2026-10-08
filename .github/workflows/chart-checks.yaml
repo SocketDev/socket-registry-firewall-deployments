@@ -1,0 +1,80 @@
+name: Chart checks
+
+# Gates every PR so a published chart version never changes content and never
+# points at an image the registry cannot serve.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 2           # HEAD is the PR merge commit; HEAD^1 is the base branch tip
+          persist-credentials: false
+
+      - name: Chart version changes with the chart
+        run: |
+          set -euo pipefail
+          version=$(yq '.version' helm/Chart.yaml)
+          if ! git diff --quiet HEAD^1 HEAD -- helm && [ "$version" = "$(git show HEAD^1:helm/Chart.yaml | yq '.version')" ]; then
+            echo "::error file=helm/Chart.yaml::helm/ changed but the chart version is still $version. Published versions are immutable; bump version."
+            exit 1
+          fi
+
+      - name: image.tag matches appVersion
+        run: |
+          set -euo pipefail
+          app=$(yq '.appVersion' helm/Chart.yaml)
+          tag=$(yq '.image.tag' helm/values.yaml)
+          if [ -n "$tag" ] && [ "$tag" != "$app" ]; then
+            echo "::error file=helm/values.yaml::image.tag $tag differs from Chart.yaml appVersion $app."
+            exit 1
+          fi
+
+      - name: Release bot pins match Chart.yaml
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          from pathlib import Path
+
+          chart_text = Path('helm/Chart.yaml').read_text()
+          chart = re.search(r'^version: ([0-9.]+)$', chart_text, re.M)[1]
+          image = re.search(r'^appVersion: "([0-9.]+)"$', chart_text, re.M)[1]
+          image_tag = r'^image:\n(?:[ \t]+[^\n]*\n)*?[ \t]+tag: "([^"\n]*)"$'
+          def parameter(name):
+              return rf'^  {name}:\n(?:[ \t]{{4,}}[^\n]*\n)*?[ \t]{{4,}}Default: "([^"\n]*)"$'
+          pins = [
+              ('helm/values.yaml', image_tag, image),
+              ('cloudformation/firewall-eks.yaml', parameter('ChartVersion'), chart),
+              ('cloudformation/firewall-eks.yaml', parameter('FirewallImageTag'), image),
+              ('cloudformation/values/dns-override.values.yaml', image_tag, image),
+              ('helm/README.md', r'^\| `image\.tag` \|[^\n]*?\| `"([^"`\n]*)"` \|$', image),
+              ('cloudformation/README.md', r'Chart version defaults to `([^`\n]*)`', chart),
+              ('cloudformation/README.md', r'image pinned to `([^`\n]*)`', image),
+              ('cloudformation/README.md', r'`image\.tag`, default `([^`\n]*)`', image),
+          ]
+          failed = False
+          for name, pattern, want in pins:
+              found = re.findall(pattern, Path(name).read_text(), re.M)
+              if found != [want]:
+                  print(f'::error file={name}::expected one pin equal to {want}, found {found}. The firewall release bot exits when this pin differs from helm/Chart.yaml.')
+                  failed = True
+          sys.exit(failed)
+          EOF
+
+      - name: Image exists in the registry
+        run: |
+          set -euo pipefail
+          image="$(yq '.image.repository' helm/values.yaml):$(yq '.appVersion' helm/Chart.yaml)"
+          if ! docker manifest inspect "$image" > /dev/null; then
+            echo "::error file=helm/Chart.yaml::$image does not resolve in the registry."
+            exit 1
+          fi
