@@ -49,12 +49,14 @@ Parameters:
 
   RedisNodeType:
     Type: String
-    Default: cache.t4g.small
-    Description: ElastiCache node type.
+    Default: cache.t4g.medium
+    Description: >-
+      ElastiCache node type. cache.t4g.medium (3 GiB) covers up to about 2,500
+      developers; use cache.m7g.large (6 GiB) above that.
 
   ChartVersion:
     Type: String
-    Default: "0.11.9"
+    Default: "0.11.10"
     Description: Socket Firewall Helm chart version to install.
 
   FirewallImageTag:

@@ -15,13 +15,20 @@ Parameters:
     Default: "1.30"
   NodeInstanceType:
     Type: String
-    Default: t3.large
+    Default: m6i.xlarge
+    Description: >-
+      Node size. Each firewall pod requests 2 vCPU and 8 GiB, so m6i.xlarge
+      (4 vCPU, 16 GiB) fits one pod per node. t3.large can't fit a pod.
   DesiredNodes:
     Type: Number
-    Default: 2
+    Default: 3
+    Description: Nodes to start with. Production runs at least 3 firewall pods across zones.
   MaxNodes:
     Type: Number
     Default: 6
+    Description: >-
+      Node group ceiling. With one pod per node, this caps the firewall's
+      autoscaling maximum; scaling nodes past DesiredNodes needs a cluster autoscaler.
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
