@@ -4,7 +4,7 @@
 
 ## Background
 
-Reference CloudFormation for deploying the Socket Registry Firewall on **AWS EKS** (firewall + Redis, DNS-override routing, self-signed certs, fail-open). This is the EKS companion to the existing per-platform deployment templates (ECS Fargate, GCP Cloud Run, Azure Container Apps).
+Reference CloudFormation for deploying the Socket Registry Firewall on **AWS EKS** (firewall + Redis, DNS-override routing, self-signed certs, fail-open). This is the EKS companion to the per-platform Terraform templates ([ECS Fargate](../terraform/aws-ecs-fargate), [GCP Cloud Run](../terraform/gcp-cloud-run), [Azure Container Apps](../terraform/azure-container-apps)).
 
 On EKS the firewall is the **Helm chart** (`../helm`), which already supports DNS-override, self-signed CA generation, and Redis/TLS — so most of the work is standing up the AWS infrastructure and installing the chart, not re-implementing the workload.
 
