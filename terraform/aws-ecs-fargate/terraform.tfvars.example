@@ -1,0 +1,33 @@
+# Required
+aws_region          = "us-east-1"
+vpc_id              = "vpc-0123456789abcdef0"
+private_subnet_ids  = ["subnet-aaa", "subnet-bbb"]
+public_subnet_ids   = ["subnet-ccc", "subnet-ddd"]
+socket_api_token    = "sktsec_XXXXXXXXXXXXXXXXXXXX"
+acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc-123"
+
+# Optional
+environment    = "production"
+firewall_image = "socketdev/socket-registry-firewall:latest"
+desired_count  = 2
+cpu            = 2048   # 2 vCPU
+memory         = 4096   # 4 GB
+socket_fail_open = true
+assign_public_ip = false  # Set to true if using public subnets without a NAT gateway
+
+# Registries to proxy (default: npm only)
+# Each entry creates a path-based route: /npm, /pypi, etc.
+registries = {
+  npm = "https://registry.npmjs.org"
+  # pypi  = "https://pypi.org"
+  # maven = "https://repo1.maven.org/maven2"
+}
+
+# Redis (optional)
+redis_enabled = false
+# redis_host  = "your-redis.abc123.cache.amazonaws.com"
+# redis_port  = 6379
+
+tags = {
+  Team = "security"
+}
