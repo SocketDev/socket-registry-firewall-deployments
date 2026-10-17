@@ -71,6 +71,8 @@ socket_fail_open = true
 # Redis (optional) -- shared cache across replicas
 # Use Azure Cache for Redis with cluster mode disabled (Basic/Standard, or
 # Premium with clustering off). Deploy it in the same region as the firewall.
+# Start at Standard C2 (2.5 GB) or larger; C0 (250 MB, 256 connections) is too
+# small. Keep the default maxmemory-policy (volatile-lru).
 redis_enabled = false
 # redis_host     = "<name>.redis.cache.windows.net"
 # redis_port     = 6380
@@ -82,12 +84,13 @@ redis_enabled = false
 # secret out-of-band (az keyvault secret set ...) and reference it instead:
 # redis_password_key_vault_secret_id = "https://<vault>.vault.azure.net/secrets/<name>"
 
-# Scaling
+# Scaling (starting point from the sizing guide:
+# https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing)
 firewall_image = "socketdev/socket-registry-firewall:latest"
-min_replicas   = 2
+min_replicas   = 3
 max_replicas   = 10
-cpu            = 1.0
-memory         = "2Gi"
+cpu            = 4.0
+memory         = "8Gi" # must be 2x cpu on the Consumption profile
 
 tags = {
   managed-by  = "terraform"

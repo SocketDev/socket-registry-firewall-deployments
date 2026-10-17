@@ -57,21 +57,21 @@ variable "firewall_image" {
 }
 
 variable "desired_count" {
-  description = "Number of ECS tasks to run"
+  description = "Number of ECS tasks to run, and the autoscaling minimum. Production deployments run at least 3; see the sizing guide for counts by developer count."
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "cpu" {
-  description = "CPU units for the ECS task (1024 = 1 vCPU)"
+  description = "CPU units for the ECS task (1024 = 1 vCPU). 4096 with 8192 MB matches the sizing guide; the nginx worker count follows this value."
   type        = number
-  default     = 2048
+  default     = 4096
 }
 
 variable "memory" {
-  description = "Memory in MB for the ECS task"
+  description = "Memory in MB for the ECS task. Metadata filtering needs about 2048 MB per vCPU."
   type        = number
-  default     = 4096
+  default     = 8192
 }
 
 variable "redis_enabled" {

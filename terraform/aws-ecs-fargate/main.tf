@@ -34,8 +34,15 @@ locals {
       https = 8443
     }
     socket = {
-      api_url   = "https://api.socket.dev"
-      fail_open = var.socket_fail_open
+      api_url          = "https://api.socket.dev"
+      fail_open        = var.socket_fail_open
+      api_read_timeout = 60
+    }
+    # Worker count follows the task's vCPU allocation (1024 CPU units = 1 vCPU).
+    nginx = {
+      worker_processes     = max(1, floor(var.cpu / 1024))
+      worker_connections   = 4096
+      worker_rlimit_nofile = 8192
     }
     cache = {
       ttl = 600

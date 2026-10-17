@@ -165,27 +165,27 @@ variable "redis_ssl" {
 # ── Scaling ──────────────────────────────────────────────────────────────────
 
 variable "min_replicas" {
-  description = "Minimum number of container replicas"
+  description = "Minimum number of container replicas. Production deployments run at least 3; see the sizing guide for counts by developer count."
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "max_replicas" {
   description = "Maximum number of container replicas"
   type        = number
-  default     = 5
+  default     = 10
 }
 
 variable "cpu" {
-  description = "CPU cores allocated to the container (e.g. 0.5, 1.0, 2.0)"
+  description = "CPU cores per replica. 4.0 with 8Gi matches the sizing guide; the nginx worker count follows this value."
   type        = number
-  default     = 1.0
+  default     = 4.0
 }
 
 variable "memory" {
-  description = "Memory allocated to the container in Gi (e.g. 1Gi, 2Gi)"
+  description = "Memory per replica. On the Consumption profile, memory must be 2x the CPU value (4.0 cores = 8Gi), which also covers metadata filtering at about 2Gi per core."
   type        = string
-  default     = "2Gi"
+  default     = "8Gi"
 }
 
 # ── Networking ───────────────────────────────────────────────────────────────

@@ -60,8 +60,16 @@ locals {
         https = 8443
       }
       socket = {
-        api_url   = "https://api.socket.dev"
-        fail_open = var.socket_fail_open
+        api_url          = "https://api.socket.dev"
+        fail_open        = var.socket_fail_open
+        api_read_timeout = 60
+      }
+      # Worker count follows the instance's CPU allocation. Millicore values
+      # such as "500m" fall back to one worker.
+      nginx = {
+        worker_processes     = can(tonumber(var.cpu)) ? max(1, floor(tonumber(var.cpu))) : 1
+        worker_connections   = 4096
+        worker_rlimit_nofile = 8192
       }
       cache = {
         ttl = 600
@@ -371,7 +379,7 @@ resource "google_cloud_run_v2_service" "firewall" {
         initial_delay_seconds = 10
         period_seconds        = 15
         failure_threshold     = 3
-        timeout_seconds       = 5
+        timeout_seconds       = 10 # a busy instance can be slow to answer; tight timeouts restart healthy instances
       }
     }
   }

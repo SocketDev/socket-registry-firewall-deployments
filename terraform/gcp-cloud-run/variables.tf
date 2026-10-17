@@ -105,9 +105,9 @@ variable "redis_port" {
 # ── Scaling & resources ─────────────────────────────────────────────
 
 variable "min_instances" {
-  description = "Minimum number of Cloud Run instances"
+  description = "Minimum number of Cloud Run instances. Production deployments run at least 3; see the sizing guide for counts by developer count."
   type        = number
-  default     = 1
+  default     = 3
 }
 
 variable "max_instances" {
@@ -117,15 +117,15 @@ variable "max_instances" {
 }
 
 variable "cpu" {
-  description = "CPU allocation per instance (e.g. '1', '2')"
+  description = "CPU allocation per instance ('1', '2', '4', or '8'). '4' with '8Gi' matches the sizing guide; the nginx worker count follows this value."
   type        = string
-  default     = "1"
+  default     = "4"
 }
 
 variable "memory" {
-  description = "Memory allocation per instance (e.g. '512Mi', '1Gi')"
+  description = "Memory allocation per instance (e.g. '8Gi'). Metadata filtering needs about 2Gi per CPU."
   type        = string
-  default     = "512Mi"
+  default     = "8Gi"
 }
 
 # ── Networking ───────────────────────────────────────────────────────

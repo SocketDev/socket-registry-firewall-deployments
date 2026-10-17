@@ -1,6 +1,6 @@
 # Socket Firewall - AWS ECS Fargate (Terraform)
 
-Terraform template for deploying the [Socket Registry Firewall](https://github.com/SocketDev/socket-nginx-firewall) on AWS ECS Fargate.
+Terraform template for deploying the [Socket Registry Firewall](https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode) on AWS ECS Fargate.
 
 ## What it provisions
 
@@ -43,8 +43,12 @@ Key variables:
 - `public_subnet_ids` - Subnets for the ALB (required)
 - `acm_certificate_arn` - ACM cert for HTTPS (required)
 - `registries` - Map of registries to proxy (default: `{npm = "https://registry.npmjs.org"}`)
-- `desired_count` - Number of tasks (default: 2)
-- `cpu` / `memory` - Task size (default: 2 vCPU / 4 GB)
+- `desired_count` - Number of tasks and the autoscaling minimum (default: 3)
+- `cpu` / `memory` - Task size (default: 4 vCPU / 8 GB). The nginx worker count follows `cpu`.
+
+## Sizing
+
+The defaults (3 tasks of 4 vCPU and 8 GB each) are the starting point from the [sizing guide](https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing). Raise `desired_count` for larger developer counts; autoscaling allows up to 4 times that. The template sets the nginx worker count from `cpu`.
 
 ## Registries
 
@@ -119,6 +123,6 @@ npm install peacenotwar@9.1.3 --registry https://<alb-dns-name>/npm --strict-ssl
 
 ## Other deployment options
 
-- **Already on Kubernetes?** Use the [Helm chart](https://github.com/socketdev-demo/socket-firewall-helm)
-- **On GCP?** See [socket-firewall-gcp-cloud-run](https://github.com/socketdev-demo/socket-firewall-gcp-cloud-run)
-- **On Azure?** See [socket-firewall-azure-container-apps](https://github.com/socketdev-demo/socket-firewall-azure-container-apps)
+- **Already on Kubernetes?** Use the [Helm chart](../../helm), or the [EKS CloudFormation templates](../../cloudformation)
+- **On GCP?** See the [Cloud Run template](../gcp-cloud-run)
+- **On Azure?** See the [Container Apps template](../azure-container-apps)

@@ -1,6 +1,6 @@
 # Socket Firewall - GCP Cloud Run (Terraform)
 
-Terraform template for deploying the [Socket Registry Firewall](https://github.com/SocketDev/socket-nginx-firewall) on GCP Cloud Run.
+Terraform template for deploying the [Socket Registry Firewall](https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode) on GCP Cloud Run.
 
 ## What it provisions
 
@@ -43,8 +43,12 @@ Key variables:
 - `webhook_url` - Optional endpoint that receives a JSON event per blocked package
 - `socket_fail_open` - Allow requests when Socket API is unreachable (default: true)
 - `ssl_cert` / `ssl_key` - Optional; Cloud Run terminates TLS, so the container's HTTPS listener normally uses the image's bundled cert
-- `min_instances` / `max_instances` - Scaling bounds (default: 1 / 10)
-- `cpu` / `memory` - Container resources (default: 1 / 512Mi)
+- `min_instances` / `max_instances` - Scaling bounds (default: 3 / 10)
+- `cpu` / `memory` - Container resources (default: 4 / 8Gi). The nginx worker count follows `cpu`.
+
+## Sizing
+
+The defaults (3 instances of 4 CPU and 8Gi each) are the starting point from the [sizing guide](https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing). Raise `min_instances` for larger developer counts, and keep about 2Gi of memory per CPU. The template sets the nginx worker count from `cpu`.
 
 ## Registries
 
@@ -134,6 +138,6 @@ Cloud Run mounts secret volumes as directories, not individual files. The templa
 
 ## Other deployment options
 
-- **Already on Kubernetes?** Use the [Helm chart](https://github.com/socketdev-demo/socket-firewall-helm)
-- **On AWS?** See [socket-firewall-aws-ecs-fargate](https://github.com/socketdev-demo/socket-firewall-aws-ecs-fargate)
-- **On Azure?** See [socket-firewall-azure-container-apps](https://github.com/socketdev-demo/socket-firewall-azure-container-apps)
+- **Already on Kubernetes?** Use the [Helm chart](../../helm)
+- **On AWS?** See the [ECS Fargate template](../aws-ecs-fargate) or the [EKS CloudFormation templates](../../cloudformation)
+- **On Azure?** See the [Container Apps template](../azure-container-apps)

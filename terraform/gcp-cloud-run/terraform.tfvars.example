@@ -35,10 +35,12 @@ socket_fail_open = true
 
 firewall_image = "socketdev/socket-registry-firewall:latest"
 
-min_instances = 1
-max_instances = 5
-cpu           = "1"
-memory        = "512Mi"
+# Starting point from the sizing guide:
+# https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing
+min_instances = 3
+max_instances = 10
+cpu           = "4"
+memory        = "8Gi"
 
 # Ingress reachability.
 # INGRESS_TRAFFIC_INTERNAL_ONLY: production; clients reach it via your VPC.
@@ -54,7 +56,9 @@ ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
 # vpc_network = "projects/my-gcp-project/global/networks/my-vpc"
 # vpc_subnet  = "projects/my-gcp-project/regions/us-central1/subnetworks/my-subnet"
 
-# Redis (optional; recommended with more than one instance)
+# Redis (optional; recommended with more than one instance, required with
+# metadata filtering). Use Memorystore for Redis (Standard tier, 2 GB or
+# larger), not Memorystore for Redis Cluster, which isn't supported.
 redis_enabled = false
 # redis_host  = "10.0.0.5"
 # redis_port  = 6379

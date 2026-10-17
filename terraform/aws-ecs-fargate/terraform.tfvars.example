@@ -9,9 +9,9 @@ acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc-123"
 # Optional
 environment    = "production"
 firewall_image = "socketdev/socket-registry-firewall:latest"
-desired_count  = 2
-cpu            = 2048   # 2 vCPU
-memory         = 4096   # 4 GB
+desired_count  = 3      # see https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing
+cpu            = 4096   # 4 vCPU
+memory         = 8192   # 8 GB
 socket_fail_open = true
 assign_public_ip = false  # Set to true if using public subnets without a NAT gateway
 
@@ -23,7 +23,10 @@ registries = {
   # maven = "https://repo1.maven.org/maven2"
 }
 
-# Redis (optional)
+# Redis (optional; required with metadata filtering)
+# Use a node-based ElastiCache replication group with cluster mode disabled
+# (Serverless isn't supported), cache.t4g.medium (3 GiB) or larger, and the
+# default maxmemory-policy (volatile-lru).
 redis_enabled = false
 # redis_host  = "your-redis.abc123.cache.amazonaws.com"
 # redis_port  = 6379

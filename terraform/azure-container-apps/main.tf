@@ -52,7 +52,15 @@ locals {
         https = 8443
       }
       socket = {
-        fail_open = var.socket_fail_open
+        fail_open        = var.socket_fail_open
+        api_read_timeout = 60
+      }
+      # Worker count must follow the replica's CPU allocation. The default
+      # (auto) counts the host's CPUs, not the container's share.
+      nginx = {
+        worker_processes     = max(1, ceil(var.cpu))
+        worker_connections   = 4096
+        worker_rlimit_nofile = 8192
       }
       cache = {
         ttl = 600
@@ -466,7 +474,7 @@ resource "azurerm_container_app" "firewall" {
         path                    = "/health"
         initial_delay           = 15
         interval_seconds        = 30
-        timeout                 = 5
+        timeout                 = 10 # a busy replica can be slow to answer; tight timeouts restart healthy replicas
         failure_count_threshold = 3
       }
 
