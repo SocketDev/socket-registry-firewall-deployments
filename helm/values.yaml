@@ -12,7 +12,9 @@ image:
 imagePullSecrets: []
 # - name: my-registry-secret
 
-# Number of replicas (ignored if autoscaling is enabled)
+# Number of replicas (ignored if autoscaling is enabled). Run at least 3 across
+# zones in production; see
+# https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing
 replicaCount: 1
 
 # Pod Disruption Budget (keeps pods available during node maintenance)
@@ -346,9 +348,13 @@ proxy:
 
 # Nginx performance tuning
 nginx:
+  # Keep workerProcesses equal to resources.limits.cpu.
   workerProcesses: 4
   workerConnections: 8192
-  workerRlimitNofile: 2048
+  # Open-file limit per worker. Each in-flight request uses about two file
+  # descriptors (client + upstream), so keep this at least 2x workerConnections;
+  # the old 2048 capped each worker at roughly 1,000 concurrent requests.
+  workerRlimitNofile: 16384
   keepalivePoolSize: 64
   typesHashMaxSize: 2048
   clientMaxBodySize: "100M"

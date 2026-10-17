@@ -14,7 +14,7 @@
 #   helm install socket-firewall . -f examples/corporate.yaml \
 #     --set socket.apiToken=$SOCKET_API_TOKEN
 
-replicaCount: 2
+replicaCount: 3
 
 socket:
   # Set via --set socket.apiToken=xxx
@@ -31,19 +31,21 @@ tls:
   generateSelfSigned: false
   existingSecret: corporate-wildcard-tls  # Create this secret with your corp cert
 
-# Production resources
+# Production resources (chart defaults; see the sizing guide at
+# https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing).
+# Metadata filtering decodes large registry indexes, so keep memory at 8Gi.
 resources:
   limits:
-    cpu: "2"
-    memory: 1Gi
+    cpu: "4"
+    memory: 8Gi
   requests:
-    cpu: "1"
-    memory: 512Mi
+    cpu: "2"
+    memory: 8Gi
 
 # Enable autoscaling for production
 autoscaling:
   enabled: true
-  minReplicas: 2
+  minReplicas: 3
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
 
