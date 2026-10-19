@@ -49,8 +49,11 @@ locals {
     }
     path_routing = {
       enabled = true
-      domain  = "${aws_lb.firewall.dns_name} localhost"
-      routes  = local.routes
+      # Must be a single hostname. Multiple space-separated tokens corrupt
+      # the URLs the firewall rewrites into npm metadata responses.
+      domain         = aws_lb.firewall.dns_name
+      allowed_domain = ["localhost"]
+      routes         = local.routes
     }
   })
 }

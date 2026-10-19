@@ -45,6 +45,11 @@ locals {
     registry = name
   }]
 
+  # path_routing.domain is substituted into rewritten package URLs, so it
+  # must be one hostname. Extra tokens from var.domain (cert SANs) and
+  # localhost belong in allowed_domain.
+  domain_tokens = compact(split(" ", var.domain))
+
   socket_yml = yamlencode(merge(
     {
       ports = {
@@ -71,8 +76,12 @@ locals {
       }
       path_routing = {
         enabled = true
-        domain  = "${var.domain} localhost"
-        routes  = local.routes
+        domain  = local.domain_tokens[0]
+        allowed_domain = distinct(concat(
+          slice(local.domain_tokens, 1, length(local.domain_tokens)),
+          ["localhost"],
+        ))
+        routes = local.routes
       }
     },
     var.debug_logging_enabled ? {
@@ -366,8 +375,10 @@ resource "azurerm_container_app" "firewall" {
 
   ingress {
     external_enabled = false
-    target_port      = 8443
-    transport        = "http"
+    # Ingress terminates TLS and forwards HTTP. Send that to the HTTP
+    # listener (8080); 8443 is nginx's TLS port and rejects cleartext.
+    target_port = 8080
+    transport   = "http"
 
     traffic_weight {
       percentage      = 100
