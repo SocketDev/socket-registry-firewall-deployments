@@ -138,6 +138,7 @@ registries:
 | `ingress.enabled` | Enable Ingress | `false` |
 | `ingress.className` | Ingress class (nginx, alb, traefik) | `""` |
 | `autoscaling.enabled` | Enable HorizontalPodAutoscaler | `false` |
+| `strategy` | Deployment rolling-update strategy. Empty uses Kubernetes defaults. Packed clusters should set `maxSurge: 0` and `maxUnavailable: 1` | `{}` |
 | `podDisruptionBudget.enabled` | Keep pods available during node maintenance | `true` |
 | `topologySpreadConstraints` | Evenly spread replicas across zones/nodes | `[]` |
 | `extraContainers` | Sidecar containers (auth proxies, log collectors) | `[]` |

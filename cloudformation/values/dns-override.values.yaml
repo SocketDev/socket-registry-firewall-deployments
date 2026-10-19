@@ -168,6 +168,14 @@ autoscaling:
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
 
+# Packed one-pod-per-node cluster has no surge capacity and no cluster
+# autoscaler. Replace in place so helm upgrades don't hang Pending.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 0
+    maxUnavailable: 1
+
 podDisruptionBudget:
   enabled: true
   minAvailable: 2

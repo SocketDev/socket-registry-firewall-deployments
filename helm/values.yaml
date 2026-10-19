@@ -17,6 +17,16 @@ imagePullSecrets: []
 # https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing
 replicaCount: 1
 
+# Deployment update strategy. Empty uses Kubernetes defaults (RollingUpdate,
+# maxSurge 25%, maxUnavailable 25%). Packed clusters (one 8Gi pod per node,
+# no spare capacity) should set maxSurge: 0 and maxUnavailable: 1 so rollouts
+# replace in place instead of stalling on a Pending surge pod.
+strategy: {}
+  # type: RollingUpdate
+  # rollingUpdate:
+  #   maxSurge: 0
+  #   maxUnavailable: 1
+
 # Pod Disruption Budget (keeps pods available during node maintenance)
 podDisruptionBudget:
   enabled: true
