@@ -307,7 +307,7 @@ spec:
           {{- if .Values.healthCheck.enabled }}
           livenessProbe:
             httpGet:
-              path: {{ .Values.healthCheck.path }}
+              path: {{ .Values.healthCheck.livenessPath | default .Values.healthCheck.path }}
               port: http
             initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthCheck.periodSeconds }}

@@ -144,6 +144,9 @@ registries:
 | `resources.limits.cpu` | CPU limit | `4` |
 | `resources.limits.memory` | Memory limit | `8Gi` |
 | `terminationGracePeriodSeconds` | Pod grace period; set ≥ `forwardProxy.maxTunnelLifetimeSeconds` when CONNECT is enabled | `""` (30s) |
+| `healthCheck.enabled` | Add liveness and readiness probes — see [section below](#health-checks) | `true` |
+| `healthCheck.path` | Readiness probe path, and the liveness path when `livenessPath` is empty | `/health` |
+| `healthCheck.livenessPath` | Liveness probe path; `""` falls back to `healthCheck.path` | `/health/live` |
 | **Forward Proxy (HTTP CONNECT)** | _CASB CONNECT tunnels — see [section below](#forward-proxy-http-connect)_ | |
 | `forwardProxy.enabled` | Enable the CONNECT listener (requires image ≥ 1.1.275) | `false` |
 | `forwardProxy.port` | CONNECT listener port | `3128` |
@@ -674,6 +677,17 @@ redis:
 ```
 
 The `sslCaCert`, `sslClientCert`, and `sslClientKey` fields remain available as raw file paths if you are delivering the cert files via your own volume or init container.
+
+## Health Checks
+
+The readiness probe uses `/health`, which answers 200 whenever nginx is running. The liveness probe uses `/health/live`, which also checks DNS inside every nginx worker. Each worker resolves its own hostnames, so one worker can lose DNS while the others keep working. `/health/live` answers 503 when one worker cannot resolve a host (the Socket API or outbound proxy, and Redis) that another worker in the same pod resolves. Kubernetes then restarts the pod. A restart cannot fix DNS failing on every worker, such as cluster DNS being down or a Redis name that does not exist, so `/health/live` keeps answering 200 in that case and logs `[DNS_LIVENESS]` lines instead.
+
+**Upgrading from 0.11.x:** the liveness probe moves from `/health` to `/health/live`; readiness is unchanged. Firewall images older than the endpoint answer `/health/live` exactly like `/health`, so pinning an older `image.tag` is safe. If you set a custom `healthCheck.path`, liveness no longer follows it. To keep the previous behavior:
+
+```yaml
+healthCheck:
+  livenessPath: ""
+```
 
 ## Metrics & Monitoring
 

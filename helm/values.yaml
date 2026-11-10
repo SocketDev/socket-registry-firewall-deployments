@@ -737,7 +737,14 @@ resources:
 # — if :3128 fails to bind, nginx won't start and the probe fails too.
 healthCheck:
   enabled: true
+  # Readiness probe path, and the liveness path when livenessPath is empty.
   path: /health
+  # Liveness probe path. /health/live fails only when one nginx worker cannot
+  # resolve a host (Socket API or outbound proxy, Redis) that its sibling workers
+  # resolve, so Kubernetes restarts a pod with a DNS-broken worker. DNS failing on
+  # every worker (e.g. cluster DNS down) does not fail it. Images that predate the
+  # endpoint answer it like /health. Set to "" to probe `path` instead.
+  livenessPath: /health/live
   initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 10
