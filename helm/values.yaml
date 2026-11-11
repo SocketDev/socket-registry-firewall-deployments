@@ -748,9 +748,13 @@ healthCheck:
   # Liveness probe path. /health/live fails only when one nginx worker cannot
   # resolve a host (Socket API or outbound proxy, Redis) that its sibling workers
   # resolve, so Kubernetes restarts a pod with a DNS-broken worker. DNS failing on
-  # every worker (e.g. cluster DNS down) does not fail it. Images that predate the
-  # endpoint answer it like /health. Set to "" to probe `path` instead.
+  # every worker (e.g. cluster DNS down) does not fail it. Set to "" to probe
+  # `path` instead.
   livenessPath: /health/live
+  # Images older than this probe `path` instead of /health/live: they do not
+  # exempt /health/live from the client auth gate (socket.bearerToken), so it
+  # would return 401. Non-semver tags (latest, digests) are assumed new enough.
+  livenessMinImageVersion: "2.17.0"
   initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 10
