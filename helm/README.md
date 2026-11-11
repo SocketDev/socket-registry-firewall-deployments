@@ -147,6 +147,9 @@ registries:
 | `healthCheck.enabled` | Add liveness and readiness probes — see [section below](#health-checks) | `true` |
 | `healthCheck.path` | Readiness probe path, and the liveness path when `livenessPath` is empty | `/health` |
 | `healthCheck.livenessPath` | Liveness probe path; `""` falls back to `healthCheck.path` | `/health/live` |
+| `nginx.resolver` | DNS server for upstream names (e.g. kube-dns `10.96.0.10`); empty auto-detects | `""` |
+| `nginx.resolverTimeout` | How long one DNS lookup waits for an answer before it fails | `"10s"` |
+| `nginx.resolverValid` | How long a resolved address is reused before it is looked up again | `"5s"` |
 | **Forward Proxy (HTTP CONNECT)** | _CASB CONNECT tunnels — see [section below](#forward-proxy-http-connect)_ | |
 | `forwardProxy.enabled` | Enable the CONNECT listener (requires image ≥ 1.1.275) | `false` |
 | `forwardProxy.port` | CONNECT listener port | `3128` |
@@ -688,6 +691,12 @@ The readiness probe uses `/health`, which answers 200 whenever nginx is running.
 healthCheck:
   livenessPath: ""
 ```
+
+## DNS Timeouts
+
+`nginx.resolverTimeout` (default `10s`) is how long one DNS lookup waits for an answer before it fails. `nginx.resolverValid` (default `5s`) is how long a resolved address is reused before it is looked up again. A request can need more than one lookup (the outbound proxy, Redis, the Socket API), so a DNS server that stops answering delays a request by up to `resolverTimeout` per lookup before it fails.
+
+**Upgrading from 0.11.x:** `resolverTimeout` used to set how long a resolved address was reused, and every lookup waited 30 seconds for an answer. Firewall images released before this chart still read `resolverTimeout` that way and ignore `resolverValid`, so with this chart's defaults an older image reuses addresses for 10 seconds instead of 5.
 
 ## Metrics & Monitoring
 

@@ -359,7 +359,13 @@ nginx:
   # DNS resolver for upstream name resolution (e.g. kube-dns "10.96.0.10").
   # Empty leaves the firewall to auto-detect (127.0.0.11 for Docker).
   resolver: ""
-  resolverTimeout: "5s"
+  # How long one DNS lookup waits for an answer before it fails. The resolver
+  # resends an unanswered query every 5s, so 10s allows one resend.
+  resolverTimeout: "10s"
+  # How long a resolved address is reused before it is looked up again. A longer
+  # time widens the window at the start of a cluster DNS outage where one worker's
+  # cached answer looks like a sibling worker's fault to the /health/live probe.
+  resolverValid: "5s"
   # Access log buffer setting (default: not set, nginx uses its default)
   # Set to "off" to flush access log lines immediately to stdout
   accessLogBuffer: "off"

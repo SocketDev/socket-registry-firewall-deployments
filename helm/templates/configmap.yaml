@@ -146,6 +146,7 @@ data:
       accept_mutex: {{ .Values.nginx.acceptMutex }}
       http2: {{ .Values.nginx.http2 }}
       resolver_timeout: {{ .Values.nginx.resolverTimeout | quote }}
+      resolver_valid: {{ .Values.nginx.resolverValid | quote }}
       {{- if .Values.nginx.accessLogBuffer }}
       access_log_buffer: {{ .Values.nginx.accessLogBuffer }}
       {{- end }}
