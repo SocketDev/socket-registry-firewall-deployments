@@ -29,7 +29,7 @@ The base template currently takes the **handoff** approach: CloudFormation provi
 
 ## Config model
 
-On EKS the Helm chart renders the firewall config into a **ConfigMap**. The stack injects install-time values for the ElastiCache endpoint (`redis.host`), the Socket token (`socket.apiToken`, read from Secrets Manager), and the firewall image tag (`image.tag`, default `2.16.5`). Chart version defaults to `0.11.21`.
+On EKS the Helm chart renders the firewall config into a **ConfigMap**. The stack injects install-time values for the ElastiCache endpoint (`redis.host`), the Socket token (`socket.apiToken`, read from Secrets Manager), and the firewall image tag (`image.tag`, default `2.16.5`). Chart version defaults to `0.12.0`.
 
 ## Known DRAFT caveats
 
