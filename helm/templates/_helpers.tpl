@@ -52,6 +52,33 @@ hand semverCompare a tag it would reject (that includes 4-component tags).
 {{- end }}
 
 {{/*
+Liveness probe path. healthCheck.livenessPath, falling back to healthCheck.path
+when it is empty. /health/live falls back to healthCheck.path on semver image
+tags older than healthCheck.livenessMinImageVersion: those images exempt only
+the exact path /health from the client auth gate, so /health/live returns 401
+there when socket.bearerToken is set and liveness would restart the pod in a
+loop. Non-semver tags are assumed new enough, as in metricsExposed.
+*/}}
+{{- define "socket-firewall.livenessPath" -}}
+{{- $path := .Values.healthCheck.livenessPath | default .Values.healthCheck.path -}}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion | toString -}}
+{{- $floor := .Values.healthCheck.livenessMinImageVersion | default "2.17.0" -}}
+{{- $useFallback := false -}}
+{{- if eq $path "/health/live" -}}
+{{- if regexMatch "^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z-.]+)?(\\+[0-9A-Za-z-.]+)?$" $tag -}}
+{{- if not (semverCompare (printf ">=%s" $floor) $tag) -}}
+{{- $useFallback = true -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $useFallback -}}
+{{- .Values.healthCheck.path -}}
+{{- else -}}
+{{- $path -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "socket-firewall.chart" -}}
