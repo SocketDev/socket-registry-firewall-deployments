@@ -6,7 +6,11 @@ version: 0.11.27
 # appVersion is the firewall image version. image.tag in values.yaml must equal
 # it or be empty (empty falls back to it, see templates/_helpers.tpl); the Chart
 # checks workflow fails a PR where they differ.
+<<<<<<< HEAD
 appVersion: "2.22.0"
+=======
+appVersion: "2.19.1"
+>>>>>>> ba2462e (chore: update firewall image to 2.19.1 (#93))
 keywords:
   - security
   - supply-chain
