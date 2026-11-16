@@ -41,6 +41,20 @@ data:
       {{- if .Values.socket.basicAuthPassword }}
       basic_auth_password: {{ .Values.socket.basicAuthPassword | quote }}
       {{- end }}
+      {{- with .Values.socket.clientMtls }}
+      {{- if .enabled }}
+      {{- if not .caBundleExistingSecret }}
+      {{- fail "socket.clientMtls.enabled requires socket.clientMtls.caBundleExistingSecret (the Secret holding the CA bundle client certificates must chain to)" }}
+      {{- end }}
+      client_mtls:
+        enabled: true
+        ca_bundle: /etc/nginx/client-mtls/ca/ca-bundle.pem
+        {{- if .crlExistingSecret }}
+        crl: /etc/nginx/client-mtls/crl/crl.pem
+        {{- end }}
+        require: {{ .require }}
+      {{- end }}
+      {{- end }}
       {{- if .Values.socket.healthApiToken }}
       health_api_token: {{ .Values.socket.healthApiToken | quote }}
       {{- end }}

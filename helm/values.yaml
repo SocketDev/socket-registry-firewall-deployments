@@ -100,6 +100,23 @@ socket:
   # Client auth gate — HTTP basic auth. Rendered into the ConfigMap (not a Secret).
   basicAuthUsername: ""
   basicAuthPassword: ""
+  # Client auth gate — inbound client certificates (mTLS). Requires firewall image
+  # 2.15.0 or later, and TLS must end at the firewall pods: an Ingress or L7 load
+  # balancer in front consumes the client certificate. The CA bundle and CRL come
+  # from Secrets you create; the chart mounts them and points socket.yml at them.
+  # The firewall reads both files at startup, so restart the pods after changing
+  # either Secret.
+  clientMtls:
+    enabled: false
+    # true rejects requests without a verified certificate; false only logs them.
+    require: true
+    # Secret holding the PEM CA bundle client certificates must chain to. Required
+    # when enabled.
+    caBundleExistingSecret: ""
+    caBundleExistingSecretKey: "ca-bundle.pem"
+    # Optional Secret holding a PEM CRL covering every CA in the bundle.
+    crlExistingSecret: ""
+    crlExistingSecretKey: "crl.pem"
   # Token guarding the authenticated health endpoint. Empty leaves it unauthenticated
   # (falls back to the SOCKET_HEALTH_API_TOKEN env var).
   healthApiToken: ""
