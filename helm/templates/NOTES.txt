@@ -34,8 +34,14 @@ Get the NodePort:
 For testing, use port-forward:
 
   kubectl port-forward svc/{{ include "socket-firewall.fullname" . }} 8443:{{ .Values.service.httpsPort }} -n {{ .Release.Namespace }}
+{{- if eq (include "socket-firewall.clientMtlsEnabled" .) "true" }}
+
+For production, change service.type to LoadBalancer (Layer 4). Client certificate
+auth is on, and an Ingress would end TLS before the pod.
+{{- else }}
 
 For production, expose via Ingress or change service.type to LoadBalancer.
+{{- end }}
 {{- end }}
 
 ## Usage
@@ -116,6 +122,57 @@ Expose it via a Layer-4 (TCP passthrough) load balancer; it cannot go through an
 
   Tip: set terminationGracePeriodSeconds >= forwardProxy.maxTunnelLifetimeSeconds so
   in-flight tunnels drain on rollout/scale-down.
+{{- end }}
+{{- end }}
+{{- if eq (include "socket-firewall.clientMtlsEnabled" .) "true" }}
+{{- $require := eq (include "socket-firewall.clientMtlsBool" (dict "root" . "key" "require" "default" "true")) "true" }}
+{{- $credential := or .Values.socket.bearerToken .Values.socket.bearerTokenExistingSecret (and .Values.socket.basicAuthUsername .Values.socket.basicAuthPassword) }}
+{{- $httpsTarget := toString .Values.service.httpsTargetPort }}
+{{- $httpPort := toString (.Values.service.containerHttpPort | default .Values.service.httpPort) }}
+
+## Client Certificate Auth (mTLS)
+{{- if and $require $credential }}
+
+Enforcing: a request needs a verified client certificate or the configured
+bearer token or basic-auth credential. To require a certificate from every
+client, leave the bearer token and basic auth unset.
+{{- else if $require }}
+
+Enforcing: requests without a verified client certificate are rejected.
+{{- if .Values.socket.useRemoteConfig }}
+With socket.useRemoteConfig on, a bearer token or basic-auth credential set in
+the Socket dashboard is also accepted in place of a certificate.
+{{- end }}
+{{- else }}
+
+Log-only: no request is rejected for its certificate. Each request without a
+verified certificate logs "[AUTH] client cert log-only" at notice level. Set
+socket.clientMtls.require=true once those lines stop for your clients.
+{{- end }}
+Not covered by the certificate check: /health, /socket/config (it has its own
+token), and OpenVSX and VS Code Marketplace routes.
+TLS must end at the Socket Firewall pod (Layer-4 load balancer or TLS passthrough).
+{{- if or (eq $httpsTarget "http") (eq $httpsTarget $httpPort) }}
+
+  WARNING: service.httpsTargetPort sends the Service's HTTPS port to the pod's
+  plain-HTTP port, so TLS ends before the pod and requests through this Service
+  cannot present a certificate.
+  {{- if $require }} Only a bearer token or basic-auth credential can
+  admit them; without one they are rejected.
+  {{- else }} Once require is true, only a bearer token or basic-auth
+  credential can admit them; without one they are rejected.
+  {{- end }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+
+  WARNING: ingress.enabled is true. Unless the Ingress controller passes TLS
+  through to the pod, no client certificate reaches Socket Firewall.
+{{- end }}
+{{- if and (not $require) (has (lower (toString .Values.socket.logLevel)) (list "warn" "error")) }}
+
+  WARNING: socket.logLevel is {{ .Values.socket.logLevel }}, which hides the log-only lines: the logs
+  look clean while clients still have no certificate. Use info (or leave it
+  empty) for the rollout.
 {{- end }}
 {{- end }}
 

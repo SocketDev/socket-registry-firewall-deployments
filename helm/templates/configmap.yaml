@@ -1,3 +1,4 @@
+{{- include "socket-firewall.validateClientMtls" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -42,7 +43,7 @@ data:
       basic_auth_password: {{ .Values.socket.basicAuthPassword | quote }}
       {{- end }}
       {{- with .Values.socket.clientMtls }}
-      {{- if .enabled }}
+      {{- if eq (include "socket-firewall.clientMtlsEnabled" $) "true" }}
       {{- if not .caBundleExistingSecret }}
       {{- fail "socket.clientMtls.enabled requires socket.clientMtls.caBundleExistingSecret (the Secret holding the CA bundle client certificates must chain to)" }}
       {{- end }}
@@ -52,7 +53,9 @@ data:
         {{- if .crlExistingSecret }}
         crl: /etc/nginx/client-mtls/crl/crl.pem
         {{- end }}
-        require: {{ .require }}
+        {{- /* An unset or null value fails closed: only an explicit false turns
+               enforcement off. */}}
+        require: {{ include "socket-firewall.clientMtlsBool" (dict "root" $ "key" "require" "default" "true") }}
       {{- end }}
       {{- end }}
       {{- if .Values.socket.healthApiToken }}

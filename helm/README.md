@@ -100,6 +100,7 @@ registries:
 | `socket.bearerTokenExistingSecretKey` | Key within the bearer-token secret | `SOCKET_BEARER_TOKEN` |
 | `socket.clientMtls.enabled` | Require inbound client certificates (mTLS); see [section below](#client-certificate-authentication-mtls) | `false` |
 | `socket.clientMtls.require` | `true` rejects requests without a verified certificate; `false` only logs them | `true` |
+| `socket.clientMtls.skipImageVersionCheck` | Skip the render check that fails when `image.tag` starts with a `major.minor` version older than 2.15 (for a re-tagged image you have confirmed is new enough) | `false` |
 | `socket.clientMtls.caBundleExistingSecret` | Secret holding the PEM CA bundle client certificates must chain to (required when enabled) | `""` |
 | `socket.clientMtls.caBundleExistingSecretKey` | Key within the CA bundle secret | `ca-bundle.pem` |
 | `socket.clientMtls.crlExistingSecret` | Optional secret holding a PEM certificate revocation list | `""` |
@@ -133,7 +134,7 @@ registries:
 | `splunk.enabled` | Enable Splunk HEC integration | `false` |
 | `webhook.enabled` | Enable webhook event delivery | `false` |
 | **Advanced Config** | | |
-| `ports.disableHttp` / `ports.disableHttps` | Disable a listener entirely | `false` |
+| `ports.disableHttp` / `ports.disableHttps` | Disable a listener entirely. With HTTP off, the health probes use HTTPS | `false` |
 | `ssl.caCert` | CA trust bundle (file path) merged into the server trust store | `""` |
 | `extraConfig` | Raw `socket.yml` passthrough (arbitrary/new top-level sections) | `{}` |
 | **Infrastructure** | | |
@@ -207,10 +208,14 @@ their `Authorization` header. Leaving both values empty keeps the gate disabled.
 ### Client certificate authentication (mTLS)
 
 The firewall can require each client to present a certificate issued by a CA you
-trust. This needs firewall image 2.15.0 or later. TLS must end at the firewall pods,
-so expose the HTTPS port through a Layer-4 (TCP passthrough) load balancer such as an
-AWS NLB. An Ingress or L7 load balancer in front of the firewall receives the client
-certificate and never passes it on.
+trust. This needs firewall image 2.15.0 or later: the render fails when `image.tag`
+starts with a `major.minor` version older than 2.15, because that image would check no
+certificate. A tag that does not start with `major.minor` (`latest`, a bare digest, a
+custom name) cannot be compared and is assumed new enough. TLS must end at the firewall
+pods, so expose the HTTPS port through a Layer-4 (TCP passthrough) load balancer such
+as an AWS NLB. An Ingress or L7 load balancer in front of the firewall receives the
+client certificate and never passes it on. The install notes warn when
+`ingress.enabled` or `service.httpsTargetPort` points that way.
 
 Store the CA bundle (the issuing CA and any intermediates, in PEM) in a secret, then
 enable the feature in log-only mode first:
@@ -231,7 +236,12 @@ socket:
 In log-only mode each request without a verified certificate logs
 `[AUTH] client cert log-only: verify=<result> uri=<uri>`. Once those lines stop for
 clients that should have certificates, set `require: true`. Requests without a
-verified certificate then get a 401.
+verified certificate then get a 401. The lines are written at notice level, so keep
+`socket.logLevel` at `info` (or empty) during the rollout: `warn` and `error` hide them.
+
+`enabled`, `require` and `skipImageVersionCheck` take `true` or `false` only. Any other
+value, an empty string included, fails the render, whether or not mTLS is enabled. A
+value left out (or null, or blank in a values file) takes its default.
 
 To check certificates against a revocation list, put a PEM CRL covering every CA in
 the bundle in another secret and set `socket.clientMtls.crlExistingSecret`. With
@@ -247,7 +257,10 @@ kubectl rollout restart deployment/socket-firewall
 ```
 
 A configured bearer token or basic-auth credential stays an accepted alternative to a
-certificate. To require certificates from every client, leave both unset.
+certificate. To require certificates from every client, leave both unset, in the chart
+and, with `socket.useRemoteConfig`, in the Socket dashboard. The health endpoints,
+`/socket/config` (it has its own token), and OpenVSX and VS Code Marketplace routes
+are not covered by the certificate check.
 
 ### Full Configuration Coverage
 

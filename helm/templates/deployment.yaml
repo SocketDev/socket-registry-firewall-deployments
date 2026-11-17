@@ -297,7 +297,7 @@ spec:
               readOnly: true
             {{- end }}
             {{- with .Values.socket.clientMtls }}
-            {{- if .enabled }}
+            {{- if eq (include "socket-firewall.clientMtlsEnabled" $) "true" }}
             - name: client-mtls-ca
               mountPath: /etc/nginx/client-mtls/ca
               readOnly: true
@@ -317,10 +317,18 @@ spec:
             - name: tmp
               mountPath: /tmp
           {{- if .Values.healthCheck.enabled }}
+          {{- /* With the HTTP listener off, probe over HTTPS. The health endpoint
+                 needs no client certificate, and the kubelet does not verify the
+                 server's. */}}
           livenessProbe:
             httpGet:
               path: {{ .Values.healthCheck.path }}
+              {{- if .Values.ports.disableHttp }}
+              port: https
+              scheme: HTTPS
+              {{- else }}
               port: http
+              {{- end }}
             initialDelaySeconds: {{ .Values.healthCheck.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthCheck.periodSeconds }}
             timeoutSeconds: {{ .Values.healthCheck.timeoutSeconds }}
@@ -328,7 +336,12 @@ spec:
           readinessProbe:
             httpGet:
               path: {{ .Values.healthCheck.path }}
+              {{- if .Values.ports.disableHttp }}
+              port: https
+              scheme: HTTPS
+              {{- else }}
               port: http
+              {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
@@ -390,20 +403,23 @@ spec:
               - key: {{ .Values.redis.sslClientKeyExistingSecretKey }}
                 path: client.key
         {{- end }}
+        {{- /* The key names fall back to their defaults here as well as in
+               values.yaml: `helm upgrade --reuse-values` drops this chart's new
+               defaults, and an empty key would render `key: null`. */}}
         {{- with .Values.socket.clientMtls }}
-        {{- if .enabled }}
+        {{- if eq (include "socket-firewall.clientMtlsEnabled" $) "true" }}
         - name: client-mtls-ca
           secret:
             secretName: {{ .caBundleExistingSecret }}
             items:
-              - key: {{ .caBundleExistingSecretKey }}
+              - key: {{ .caBundleExistingSecretKey | default "ca-bundle.pem" }}
                 path: ca-bundle.pem
         {{- if .crlExistingSecret }}
         - name: client-mtls-crl
           secret:
             secretName: {{ .crlExistingSecret }}
             items:
-              - key: {{ .crlExistingSecretKey }}
+              - key: {{ .crlExistingSecretKey | default "crl.pem" }}
                 path: crl.pem
         {{- end }}
         {{- end }}

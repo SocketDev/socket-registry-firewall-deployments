@@ -106,10 +106,22 @@ socket:
   # from Secrets you create; the chart mounts them and points socket.yml at them.
   # The firewall reads both files at startup, so restart the pods after changing
   # either Secret.
+  # enabled, require and skipImageVersionCheck take true or false only; anything
+  # else, an empty string included, fails the render, whether or not mTLS is
+  # enabled. Leave one out (or null, or blank in a values file) to take its
+  # default.
   clientMtls:
     enabled: false
-    # true rejects requests without a verified certificate; false only logs them.
+    # true rejects requests without a verified certificate; false only logs them,
+    # at notice level, so the lines are hidden when logLevel is warn or error.
     require: true
+    # The render fails when image.tag starts with a major.minor version older
+    # than 2.15, because that image ignores this block and checks no certificate.
+    # A tag that does not start with major.minor (latest, a bare digest, a custom
+    # name) cannot be compared and is assumed new enough. Set true only if the
+    # tag is your own name for an image you have confirmed is 2.15.0 or newer
+    # (for example a re-tagged copy in a private registry).
+    skipImageVersionCheck: false
     # Secret holding the PEM CA bundle client certificates must chain to. Required
     # when enabled.
     caBundleExistingSecret: ""
@@ -400,7 +412,8 @@ ports:
   http: null
   # Override the HTTPS listen port inside socket.yml. Empty/null = use service defaults.
   https: null
-  # Disable the HTTP listener entirely.
+  # Disable the HTTP listener entirely. The liveness and readiness probes then
+  # call the health endpoint over HTTPS.
   disableHttp: false
   # Disable the HTTPS listener entirely (incompatible with forwardProxy.enabled).
   disableHttps: false
