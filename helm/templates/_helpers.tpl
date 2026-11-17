@@ -138,21 +138,32 @@ Read one socket.clientMtls on/off value. Prints "true" or "false".
 Call: include "socket-firewall.clientMtlsBool" (dict "root" . "key" "require" "default" "true")
 
 Accepts a boolean or the strings "true"/"false" (what --set-string and a quoted
-value produce). An unset, null or empty value takes the given default. Anything
-else fails the render: these values switch an auth gate, so a typo must not turn
-it on or off silently. Plain template truthiness reads the string "false" as true.
+value produce). Only an unset or null value takes the given default. Anything
+else fails the render, the empty string included: these values switch an auth
+gate, so a typo, or a variable that expands to nothing in --set or inside quotes,
+must not turn it on or off silently. Plain template truthiness reads the string
+"false" as true.
+
+A blank value in a values file (`enabled:`) cannot be caught here: it is YAML
+null, and Helm drops a null key before templates run, so it looks the same as
+the missing key below and takes the default.
 
 socket.clientMtls itself may be missing: `helm upgrade --reuse-values` keeps the
-values of the installed release, which predate this block.
+values of the installed release, which predate this block. Only a missing or
+null block counts as empty. `default dict` is not used for that: it would also
+swallow false, 0, "" and [], which must fail the map check.
 */}}
 {{- define "socket-firewall.clientMtlsBool" -}}
-{{- $mtls := .root.Values.socket.clientMtls | default dict -}}
+{{- $mtls := .root.Values.socket.clientMtls -}}
+{{- if kindIs "invalid" $mtls -}}
+{{- $mtls = dict -}}
+{{- end -}}
 {{- if not (kindIs "map" $mtls) -}}
-{{- fail "socket.clientMtls must be a map of settings (enabled, require, ...)" -}}
+{{- fail (printf "socket.clientMtls must be a map of settings (enabled, require, ...), got %s" (toJson $mtls | trunc 40)) -}}
 {{- end -}}
 {{- $raw := index $mtls .key -}}
 {{- $text := toString $raw -}}
-{{- if or (kindIs "invalid" $raw) (eq $text "") -}}
+{{- if kindIs "invalid" $raw -}}
 {{- .default -}}
 {{- else if has $text (list "true" "false") -}}
 {{- $text -}}
@@ -179,7 +190,9 @@ An image older than 2.15.0 ignores socket.client_mtls and checks no certificate,
 so the release would look protected while admitting everyone. The check reads
 the major.minor the tag starts with (2.14.2, v2.14.2, 2.14, 2.14.2-internal,
 2.14.2@sha256:...) and compares the two as numbers. semverCompare is not used:
-it errors on many of these forms. A tag that does not start with major.minor
+it errors on a digest suffix and on a four-part tag, and it reads a suffixed
+tag as a pre-release, so 2.15.0-rc1 and 2.20.1-internal would count as older
+than 2.15.0. A tag that does not start with major.minor
 ("latest", a bare digest, a custom name) cannot be compared and is assumed new
 enough. A bare major is not read: a short commit hash can start with digits.
 */}}

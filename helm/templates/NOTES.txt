@@ -34,8 +34,14 @@ Get the NodePort:
 For testing, use port-forward:
 
   kubectl port-forward svc/{{ include "socket-firewall.fullname" . }} 8443:{{ .Values.service.httpsPort }} -n {{ .Release.Namespace }}
+{{- if eq (include "socket-firewall.clientMtlsEnabled" .) "true" }}
+
+For production, change service.type to LoadBalancer (Layer 4). Client certificate
+auth is on, and an Ingress would end TLS before the pod.
+{{- else }}
 
 For production, expose via Ingress or change service.type to LoadBalancer.
+{{- end }}
 {{- end }}
 
 ## Usage

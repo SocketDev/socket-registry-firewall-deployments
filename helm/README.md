@@ -240,7 +240,8 @@ verified certificate then get a 401. The lines are written at notice level, so k
 `socket.logLevel` at `info` (or empty) during the rollout: `warn` and `error` hide them.
 
 `enabled`, `require` and `skipImageVersionCheck` take `true` or `false` only. Any other
-value fails the render, whether or not mTLS is enabled.
+value, an empty string included, fails the render, whether or not mTLS is enabled. A
+value left out (or null, or blank in a values file) takes its default.
 
 To check certificates against a revocation list, put a PEM CRL covering every CA in
 the bundle in another secret and set `socket.clientMtls.crlExistingSecret`. With

@@ -107,7 +107,9 @@ socket:
   # The firewall reads both files at startup, so restart the pods after changing
   # either Secret.
   # enabled, require and skipImageVersionCheck take true or false only; anything
-  # else fails the render, whether or not mTLS is enabled.
+  # else, an empty string included, fails the render, whether or not mTLS is
+  # enabled. Leave one out (or null, or blank in a values file) to take its
+  # default.
   clientMtls:
     enabled: false
     # true rejects requests without a verified certificate; false only logs them,
