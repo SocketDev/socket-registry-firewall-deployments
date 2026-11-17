@@ -98,6 +98,12 @@ registries:
 | `socket.bearerToken` | Client auth gate token. When set, inbound requests must present `Authorization: Bearer <token>`. Empty disables the gate. | `""` |
 | `socket.bearerTokenExistingSecret` | Existing secret holding the bearer token (instead of `socket.bearerToken`) | `""` |
 | `socket.bearerTokenExistingSecretKey` | Key within the bearer-token secret | `SOCKET_BEARER_TOKEN` |
+| `socket.clientMtls.enabled` | Require inbound client certificates (mTLS); see [section below](#client-certificate-authentication-mtls) | `false` |
+| `socket.clientMtls.require` | `true` rejects requests without a verified certificate; `false` only logs them | `true` |
+| `socket.clientMtls.caBundleExistingSecret` | Secret holding the PEM CA bundle client certificates must chain to (required when enabled) | `""` |
+| `socket.clientMtls.caBundleExistingSecretKey` | Key within the CA bundle secret | `ca-bundle.pem` |
+| `socket.clientMtls.crlExistingSecret` | Optional secret holding a PEM certificate revocation list | `""` |
+| `socket.clientMtls.crlExistingSecretKey` | Key within the CRL secret | `crl.pem` |
 | `socket.failOpen` | Allow downloads if API unavailable | `true` |
 | `socket.cacheTtl` | Cache TTL in seconds | `600` |
 | `socket.logLevel` | Log level (error, warn, info, debug) | `""` (info) |
@@ -197,6 +203,51 @@ helm install fw . \
 The token is mounted into the pod as the `SOCKET_BEARER_TOKEN` env var, which the
 firewall reads at startup. Clients (npm, pip, CI, etc.) must send the same value in
 their `Authorization` header. Leaving both values empty keeps the gate disabled.
+
+### Client certificate authentication (mTLS)
+
+The firewall can require each client to present a certificate issued by a CA you
+trust. This needs firewall image 2.15.0 or later. TLS must end at the firewall pods,
+so expose the HTTPS port through a Layer-4 (TCP passthrough) load balancer such as an
+AWS NLB. An Ingress or L7 load balancer in front of the firewall receives the client
+certificate and never passes it on.
+
+Store the CA bundle (the issuing CA and any intermediates, in PEM) in a secret, then
+enable the feature in log-only mode first:
+
+```bash
+kubectl create secret generic fw-client-ca \
+  --from-file=ca-bundle.pem=./ca-bundle.pem
+```
+
+```yaml
+socket:
+  clientMtls:
+    enabled: true
+    require: false          # log-only: admit everything, log requests without a verified certificate
+    caBundleExistingSecret: fw-client-ca
+```
+
+In log-only mode each request without a verified certificate logs
+`[AUTH] client cert log-only: verify=<result> uri=<uri>`. Once those lines stop for
+clients that should have certificates, set `require: true`. Requests without a
+verified certificate then get a 401.
+
+To check certificates against a revocation list, put a PEM CRL covering every CA in
+the bundle in another secret and set `socket.clientMtls.crlExistingSecret`. With
+`require: true`, an unreadable or non-PEM CRL makes the firewall reject every request
+with a 503 until it is fixed.
+
+The chart mounts these files at fixed paths under `/etc/nginx/client-mtls/` and
+writes those paths into `socket.yml`. The firewall reads them at startup, so restart
+the pods after changing either secret:
+
+```bash
+kubectl rollout restart deployment/socket-firewall
+```
+
+A configured bearer token or basic-auth credential stays an accepted alternative to a
+certificate. To require certificates from every client, leave both unset.
 
 ### Full Configuration Coverage
 

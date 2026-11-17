@@ -296,6 +296,18 @@ spec:
               mountPath: /etc/nginx/redis-tls/key
               readOnly: true
             {{- end }}
+            {{- with .Values.socket.clientMtls }}
+            {{- if .enabled }}
+            - name: client-mtls-ca
+              mountPath: /etc/nginx/client-mtls/ca
+              readOnly: true
+            {{- if .crlExistingSecret }}
+            - name: client-mtls-crl
+              mountPath: /etc/nginx/client-mtls/crl
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- end }}
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
@@ -377,6 +389,24 @@ spec:
             items:
               - key: {{ .Values.redis.sslClientKeyExistingSecretKey }}
                 path: client.key
+        {{- end }}
+        {{- with .Values.socket.clientMtls }}
+        {{- if .enabled }}
+        - name: client-mtls-ca
+          secret:
+            secretName: {{ .caBundleExistingSecret }}
+            items:
+              - key: {{ .caBundleExistingSecretKey }}
+                path: ca-bundle.pem
+        {{- if .crlExistingSecret }}
+        - name: client-mtls-crl
+          secret:
+            secretName: {{ .crlExistingSecret }}
+            items:
+              - key: {{ .crlExistingSecretKey }}
+                path: crl.pem
+        {{- end }}
+        {{- end }}
         {{- end }}
         - name: nginx-cache
           emptyDir: {}
