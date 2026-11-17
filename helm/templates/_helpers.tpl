@@ -134,6 +134,73 @@ Bearer token secret name (client auth gate)
 {{- end }}
 
 {{/*
+Read one socket.clientMtls on/off value. Prints "true" or "false".
+Call: include "socket-firewall.clientMtlsBool" (dict "root" . "key" "require" "default" "true")
+
+Accepts a boolean or the strings "true"/"false" (what --set-string and a quoted
+value produce). An unset, null or empty value takes the given default. Anything
+else fails the render: these values switch an auth gate, so a typo must not turn
+it on or off silently. Plain template truthiness reads the string "false" as true.
+
+socket.clientMtls itself may be missing: `helm upgrade --reuse-values` keeps the
+values of the installed release, which predate this block.
+*/}}
+{{- define "socket-firewall.clientMtlsBool" -}}
+{{- $mtls := .root.Values.socket.clientMtls | default dict -}}
+{{- if not (kindIs "map" $mtls) -}}
+{{- fail "socket.clientMtls must be a map of settings (enabled, require, ...)" -}}
+{{- end -}}
+{{- $raw := index $mtls .key -}}
+{{- $text := toString $raw -}}
+{{- if or (kindIs "invalid" $raw) (eq $text "") -}}
+{{- .default -}}
+{{- else if has $text (list "true" "false") -}}
+{{- $text -}}
+{{- else -}}
+{{- fail (printf "socket.clientMtls.%s must be true or false, got %q" .key $text) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Whether client certificate (mTLS) auth is on. Prints "true" or "false".
+*/}}
+{{- define "socket-firewall.clientMtlsEnabled" -}}
+{{- include "socket-firewall.clientMtlsBool" (dict "root" . "key" "enabled" "default" "false") -}}
+{{- end }}
+
+{{/*
+Client certificate (mTLS) auth: render-time checks. Renders nothing when the
+configuration is valid.
+
+The three on/off values are checked whether or not mTLS is enabled, so a typo
+fails when it is written, not on the later upgrade that turns mTLS on.
+
+An image older than 2.15.0 ignores socket.client_mtls and checks no certificate,
+so the release would look protected while admitting everyone. The check reads
+the major.minor the tag starts with (2.14.2, v2.14.2, 2.14, 2.14.2-internal,
+2.14.2@sha256:...) and compares the two as numbers. semverCompare is not used:
+it errors on many of these forms. A tag that does not start with major.minor
+("latest", a bare digest, a custom name) cannot be compared and is assumed new
+enough. A bare major is not read: a short commit hash can start with digits.
+*/}}
+{{- define "socket-firewall.validateClientMtls" -}}
+{{- $enabled := eq (include "socket-firewall.clientMtlsEnabled" .) "true" -}}
+{{- /* Evaluated for its own check only: a bad value fails here, with its own message. */ -}}
+{{- $_ := include "socket-firewall.clientMtlsBool" (dict "root" . "key" "require" "default" "true") -}}
+{{- $skipVersion := eq (include "socket-firewall.clientMtlsBool" (dict "root" . "key" "skipImageVersionCheck" "default" "false")) "true" -}}
+{{- $tag := toString (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- $version := regexFind "^[vV]?[0-9]+\\.[0-9]+" $tag | trimPrefix "v" | trimPrefix "V" -}}
+{{- if and $enabled (not $skipVersion) $version -}}
+{{- $parts := splitList "." $version -}}
+{{- $major := atoi (index $parts 0) -}}
+{{- $minor := atoi (index $parts 1) -}}
+{{- if or (lt $major 2) (and (eq $major 2) (lt $minor 15)) -}}
+{{- fail (printf "socket.clientMtls.enabled is true but image tag %s is older than 2.15.0: that image ignores socket.clientMtls, so no client certificate would be checked. If the tag is your own name for an image you have confirmed is 2.15.0 or newer, set socket.clientMtls.skipImageVersionCheck=true" $tag) -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 TLS secret name
 */}}
 {{- define "socket-firewall.tlsSecretName" -}}
