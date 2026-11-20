@@ -117,9 +117,19 @@ socket:
     # Optional Secret holding a PEM CRL covering every CA in the bundle.
     crlExistingSecret: ""
     crlExistingSecretKey: "crl.pem"
-  # Token guarding the authenticated health endpoint. Empty leaves it unauthenticated
-  # (falls back to the SOCKET_HEALTH_API_TOKEN env var).
+  # Operator token guarding the authenticated health endpoint and the
+  # /socket/config bypass endpoint. Empty does NOT leave them unauthenticated:
+  # the firewall then accepts the Socket API key (SOCKET_SECURITY_API_TOKEN).
+  # Set a distinct token so operator access and API access do not share a
+  # credential. This value is rendered into the ConfigMap in plaintext; prefer
+  # healthApiTokenExistingSecret below.
   healthApiToken: ""
+  # Name of an existing secret containing the operator token. The chart injects
+  # it as the SOCKET_HEALTH_API_TOKEN env var. When set, healthApiToken is
+  # ignored and not rendered into the ConfigMap. Pods roll when the secret name or key changes; after you
+  # rotate the value inside the same secret, run kubectl rollout restart.
+  healthApiTokenExistingSecret: ""
+  healthApiTokenExistingSecretKey: "SOCKET_HEALTH_API_TOKEN"
   # Restrict debug logging to requests whose User-Agent matches this glob (e.g. "*pip*").
   debugUserAgentFilter: ""
   # Socket API timeouts (seconds), split into connect/send/read phases so an

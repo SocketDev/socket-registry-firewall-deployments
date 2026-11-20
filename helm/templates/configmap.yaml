@@ -55,7 +55,7 @@ data:
         require: {{ .require }}
       {{- end }}
       {{- end }}
-      {{- if .Values.socket.healthApiToken }}
+      {{- if and .Values.socket.healthApiToken (not .Values.socket.healthApiTokenExistingSecret) }}
       health_api_token: {{ .Values.socket.healthApiToken | quote }}
       {{- end }}
       save_ignore_reason: {{ .Values.socket.saveIgnoreReason }}
