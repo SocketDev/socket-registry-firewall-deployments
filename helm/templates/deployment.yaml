@@ -16,7 +16,7 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.socket.healthApiTokenExistingSecret }}
-        checksum/health-api-token-ref: {{ printf "%s/%s" . $.Values.socket.healthApiTokenExistingSecretKey | sha256sum }}
+        checksum/health-api-token-ref: {{ printf "%s/%s" . ($.Values.socket.healthApiTokenExistingSecretKey | default "SOCKET_HEALTH_API_TOKEN") | sha256sum }}
         {{- end }}
         {{- if and (eq (include "socket-firewall.metricsExposed" .) "true") .Values.metrics.podAnnotations }}
         prometheus.io/scrape: "true"
@@ -232,7 +232,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.socket.healthApiTokenExistingSecret | quote }}
-                  key: {{ .Values.socket.healthApiTokenExistingSecretKey | quote }}
+                  key: {{ .Values.socket.healthApiTokenExistingSecretKey | default "SOCKET_HEALTH_API_TOKEN" | quote }}
             {{- end }}
             - name: HTTP_PORT
               value: {{ (.Values.service.containerHttpPort | default .Values.service.httpPort) | quote }}
