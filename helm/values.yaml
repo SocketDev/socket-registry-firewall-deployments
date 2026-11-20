@@ -125,8 +125,8 @@ socket:
   # healthApiTokenExistingSecret below.
   healthApiToken: ""
   # Name of an existing secret containing the operator token. The chart injects
-  # it as the SOCKET_HEALTH_API_TOKEN env var, which takes precedence over
-  # healthApiToken. Pods roll when the secret name or key changes; after you
+  # it as the SOCKET_HEALTH_API_TOKEN env var. When set, healthApiToken is
+  # ignored and not rendered into the ConfigMap. Pods roll when the secret name or key changes; after you
   # rotate the value inside the same secret, run kubectl rollout restart.
   healthApiTokenExistingSecret: ""
   healthApiTokenExistingSecretKey: "SOCKET_HEALTH_API_TOKEN"

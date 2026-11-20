@@ -99,7 +99,7 @@ registries:
 | `socket.bearerTokenExistingSecret` | Existing secret holding the bearer token (instead of `socket.bearerToken`) | `""` |
 | `socket.bearerTokenExistingSecretKey` | Key within the bearer-token secret | `SOCKET_BEARER_TOKEN` |
 | `socket.healthApiToken` | Operator token for the authenticated health endpoint and the `/socket/config` bypass endpoint, rendered into the ConfigMap in plaintext. Empty makes the firewall accept the Socket API key instead. | `""` |
-| `socket.healthApiTokenExistingSecret` | Existing secret holding the operator token, injected as `SOCKET_HEALTH_API_TOKEN` (takes precedence over `socket.healthApiToken`). Pods roll when the secret name or key changes; run `kubectl rollout restart` after rotating the value in place. | `""` |
+| `socket.healthApiTokenExistingSecret` | Existing secret holding the operator token, injected as `SOCKET_HEALTH_API_TOKEN` (when set, `socket.healthApiToken` is ignored and not rendered). Pods roll when the secret name or key changes; run `kubectl rollout restart` after rotating the value in place. | `""` |
 | `socket.healthApiTokenExistingSecretKey` | Key within the operator-token secret | `SOCKET_HEALTH_API_TOKEN` |
 | `socket.clientMtls.enabled` | Require inbound client certificates (mTLS); see [section below](#client-certificate-authentication-mtls) | `false` |
 | `socket.clientMtls.require` | `true` rejects requests without a verified certificate; `false` only logs them | `true` |
