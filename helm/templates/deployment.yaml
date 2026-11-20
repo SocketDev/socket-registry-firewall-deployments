@@ -231,8 +231,8 @@ spec:
             - name: SOCKET_HEALTH_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.socket.healthApiTokenExistingSecret }}
-                  key: {{ .Values.socket.healthApiTokenExistingSecretKey }}
+                  name: {{ .Values.socket.healthApiTokenExistingSecret | quote }}
+                  key: {{ .Values.socket.healthApiTokenExistingSecretKey | quote }}
             {{- end }}
             - name: HTTP_PORT
               value: {{ (.Values.service.containerHttpPort | default .Values.service.httpPort) | quote }}
