@@ -150,6 +150,13 @@ registries:
 | `resources.limits.cpu` | CPU limit | `4` |
 | `resources.limits.memory` | Memory limit | `8Gi` |
 | `terminationGracePeriodSeconds` | Pod grace period; set ≥ `forwardProxy.maxTunnelLifetimeSeconds` when CONNECT is enabled | `""` (30s) |
+| `healthCheck.enabled` | Add liveness and readiness probes — see [section below](#health-checks) | `true` |
+| `healthCheck.path` | Readiness probe path, and the liveness path when `livenessPath` is empty | `/health` |
+| `healthCheck.livenessPath` | Liveness probe path; `""` falls back to `healthCheck.path` | `/health/live` |
+| `healthCheck.livenessMinImageVersion` | Image tags older than this (semver) probe `healthCheck.path` instead of `/health/live`; non-semver tags (`latest`, digests) are assumed new enough | `"2.17.0"` |
+| `nginx.resolver` | DNS server for upstream names (e.g. kube-dns `10.96.0.10`); empty auto-detects | `""` |
+| `nginx.resolverTimeout` | How long one DNS lookup waits for an answer before it fails | `"10s"` |
+| `nginx.resolverValid` | How long a resolved address is reused before it is looked up again | `"5s"` |
 | **Forward Proxy (HTTP CONNECT)** | _CASB CONNECT tunnels — see [section below](#forward-proxy-http-connect)_ | |
 | `forwardProxy.enabled` | Enable the CONNECT listener (requires image ≥ 1.1.275) | `false` |
 | `forwardProxy.port` | CONNECT listener port | `3128` |
@@ -725,6 +732,23 @@ redis:
 ```
 
 The `sslCaCert`, `sslClientCert`, and `sslClientKey` fields remain available as raw file paths if you are delivering the cert files via your own volume or init container.
+
+## Health Checks
+
+The readiness probe uses `/health`, which answers 200 whenever nginx is running. On firewall images 2.17.0 and later the liveness probe uses `/health/live`, which also checks DNS inside every nginx worker. Each worker resolves its own hostnames, so one worker can lose DNS while the others keep working. `/health/live` answers 503 when one worker cannot resolve a host (the Socket API or outbound proxy, and Redis) that another worker in the same pod resolves. Kubernetes then restarts the pod. A restart cannot fix DNS failing on every worker, such as cluster DNS being down or a Redis name that does not exist, so `/health/live` keeps answering 200 in that case and logs `[DNS_LIVENESS]` lines instead.
+
+**Upgrading from 0.11.x:** the liveness probe moves from `/health` to `/health/live` on firewall images 2.17.0 and later; readiness is unchanged. If you pin an older `image.tag`, the liveness probe stays on `healthCheck.path`: those images do not exempt `/health/live` from the client auth gate, so with `socket.bearerToken` set it would return 401 and restart the pod in a loop. The check compares `image.tag` with `healthCheck.livenessMinImageVersion`; tags that are not a version (`latest`, a digest) are assumed new enough. If you set a custom `healthCheck.path`, liveness no longer follows it on 2.17.0 and later. To keep the previous behavior:
+
+```yaml
+healthCheck:
+  livenessPath: ""
+```
+
+## DNS Timeouts
+
+`nginx.resolverTimeout` (default `10s`) is how long one DNS lookup waits for an answer before it fails. `nginx.resolverValid` (default `5s`) is how long a resolved address is reused before it is looked up again. A request can need more than one lookup (the outbound proxy, Redis, the Socket API), so a DNS server that stops answering delays a request by up to `resolverTimeout` per lookup before it fails.
+
+**Upgrading from 0.11.x:** `resolverTimeout` used to set how long a resolved address was reused, and every lookup waited 30 seconds for an answer. Firewall images released before this chart still read `resolverTimeout` that way and ignore `resolverValid`, so with this chart's defaults an older image reuses addresses for 10 seconds instead of 5.
 
 ## Metrics & Monitoring
 
