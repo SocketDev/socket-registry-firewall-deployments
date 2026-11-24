@@ -37,8 +37,9 @@ socket:
   logNoRoute: true
   debugLoggingEnabled: false
   rewritePackageUrls: true
-  # Empty = enforced globally per Socket API severity.
-  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx, huggingface
+  # Deprecated. Ecosystems where a blocking recentlyPublished alert is downgraded
+  # to warn. Empty = the Socket API's action applies everywhere.
+  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx, vscode, huggingface
   recentlyPublishedEnabledEcosystems: []
   apiSslVerify: true
   # Socket API timeouts (seconds). null inherits firewall defaults.
