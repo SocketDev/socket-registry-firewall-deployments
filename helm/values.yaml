@@ -76,9 +76,11 @@ socket:
   debugLoggingEnabled: false
   # Rewrite download/package URLs in metadata responses (e.g. Cargo config.json)
   rewritePackageUrls: true
-  # Ecosystems where recentlyPublished alerts are enforced.
-  # Empty list = enforced globally per Socket API severity.
-  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx, huggingface
+  # Deprecated: use a custom Rules & Policies rule (alert type recentlyPublished,
+  # the ecosystems, action Warn) instead. Ecosystems where a blocking
+  # recentlyPublished alert is downgraded to warn. Empty list = the Socket API's
+  # action applies everywhere.
+  # Valid: npm, pypi, maven, cargo, rubygems, nuget, go, conda, openvsx, vscode, huggingface
   recentlyPublishedEnabledEcosystems: []
 
   # Socket API endpoint. Empty uses the firewall default (https://api.socket.dev).
