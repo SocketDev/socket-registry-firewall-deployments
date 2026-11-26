@@ -1,0 +1,80 @@
+project_id = "my-gcp-project"
+region     = "us-central1"
+
+# Socket API token (pass via TF_VAR_socket_api_token env var instead of committing)
+# socket_api_token = ""
+
+# Hostname clients use to reach the firewall. Must be a single hostname.
+# After first deploy, set to the hostname from terraform output service_url,
+# or use your custom DNS name.
+domain = "registry.company.com"
+
+# Registries to proxy (default: npm only)
+# Each entry creates a path-based route: /npm, /pypi, etc.
+registries = {
+  npm = "https://registry.npmjs.org"
+  # pypi  = "https://pypi.org"
+  # go    = "https://proxy.golang.org"
+  # maven = "https://repo1.maven.org/maven2"
+}
+
+# Keep fail-open on while you validate the deployment, then decide.
+# fail_open = false means installs fail when the Socket API is unreachable.
+socket_fail_open = true
+
+# Optional: send an event to this endpoint for every blocked package
+# (feed a SIEM, or a small receiver that forwards malware blocks to Slack).
+# webhook_url         = "https://alerts.company.com/socket-firewall"
+# webhook_auth_header = "Bearer replace-me"
+
+# Optional: bring your own SSL cert for the container's HTTPS listener.
+# Not needed behind Cloud Run (Cloud Run terminates TLS). Load with
+# -var="ssl_cert=$(cat server-cert.pem)" -var="ssl_key=$(cat server-key.pem)"
+# ssl_cert = ""
+# ssl_key  = ""
+
+firewall_image = "socketdev/socket-registry-firewall:latest"
+
+# Starting point from the sizing guide:
+# https://docs.socket.dev/docs/socket-firewall-enterprise-registry-mode-sizing
+min_instances = 3
+max_instances = 10
+cpu           = "4"
+memory        = "8Gi"
+
+# Ingress reachability.
+# INGRESS_TRAFFIC_INTERNAL_ONLY: production; clients reach it via your VPC.
+# INGRESS_TRAFFIC_ALL: handy for a pilot group that is not on the VPC.
+ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+
+# Networking: use ONE of these approaches
+#
+# Option A: Serverless VPC Access connector (existing)
+# vpc_connector_name = "projects/my-gcp-project/locations/us-central1/connectors/my-connector"
+#
+# Option B: Direct VPC egress
+# vpc_network = "projects/my-gcp-project/global/networks/my-vpc"
+# vpc_subnet  = "projects/my-gcp-project/regions/us-central1/subnetworks/my-subnet"
+
+# Redis (optional; recommended with more than one instance, required with
+# metadata filtering). Use Memorystore for Redis (Standard tier, 2 GB or
+# larger), not Memorystore for Redis Cluster, which isn't supported.
+redis_enabled = false
+# redis_host  = "10.0.0.5"
+# redis_port  = 6379
+
+# IAM: who can invoke this service.
+# npm/pip/go clients cannot send GCP identity tokens, so package traffic
+# needs allUsers; restrict reachability with the ingress setting instead.
+invoker_members = [
+  # "allUsers",
+]
+
+# Optional: run as a dedicated service account instead of the default
+# compute service account. Secret access is granted automatically.
+# service_account = "socket-firewall@my-gcp-project.iam.gserviceaccount.com"
+
+labels = {
+  team        = "engineering"
+  environment = "production"
+}
